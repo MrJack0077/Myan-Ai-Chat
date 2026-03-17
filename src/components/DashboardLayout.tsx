@@ -69,7 +69,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Mobile Sidebar Overlay */}
       {isMobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-zinc-900/50 backdrop-blur-sm z-50 md:hidden"
+          className="fixed inset-0 bg-zinc-900/50 backdrop-blur-sm z-50"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
@@ -134,7 +134,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* Desktop Sidebar */}
-      <aside className={`bg-white border-r border-zinc-200 transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'} hidden md:flex flex-col sticky top-0 h-screen shrink-0`}>
+      <aside className={`bg-white border-r border-zinc-200 transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'} flex flex-col sticky top-0 h-screen shrink-0 z-20`}>
         <div className="p-6 flex items-center gap-3">
           <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shrink-0">
             <Store className="text-white w-5 h-5" />
@@ -142,7 +142,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {isSidebarOpen && <span className="font-bold text-xl text-zinc-900 truncate">{t('common.shop_manager')}</span>}
         </div>
 
-        <nav className="flex-1 px-4 space-y-1">
+        <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
           {user?.role === 'ADMIN' && isVendorPath && (
             <Link
               to="/admin/shops"
@@ -189,17 +189,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="h-16 bg-white border-b border-zinc-200 flex items-center justify-between px-4 md:px-6 sticky top-0 z-10">
+        <header className="h-16 bg-white border-b border-zinc-200 flex items-center justify-between px-4 md:px-6 sticky top-0 z-30 shadow-sm">
           <div className="flex items-center gap-2 md:gap-4">
             <button 
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 hover:bg-zinc-100 rounded-lg md:block hidden"
-            >
-              <Menu className="w-5 h-5 text-zinc-500" />
-            </button>
-            <button 
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="p-2 hover:bg-zinc-100 rounded-lg md:hidden block"
+              className="p-2 hover:bg-zinc-100 rounded-lg"
             >
               <Menu className="w-5 h-5 text-zinc-500" />
             </button>

@@ -79,7 +79,6 @@ async function startServer() {
     app.use(sirv(distPath, {
       dev: false,
       single: true,
-      compress: true,
       setHeaders: (res, pathname) => {
         if (pathname.endsWith('.css')) {
           res.setHeader('Content-Type', 'text/css; charset=utf-8');
@@ -88,8 +87,10 @@ async function startServer() {
     }));
   }
 
-  httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+  const listenPort = typeof PORT === 'string' ? parseInt(PORT, 10) : PORT;
+
+  httpServer.listen(listenPort, "0.0.0.0", () => {
+    console.log(`Server running on http://0.0.0.0:${listenPort}`);
   });
 }
 

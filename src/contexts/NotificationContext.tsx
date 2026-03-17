@@ -37,12 +37,16 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const LOW_STOCK_THRESHOLD = 5;
 
   useEffect(() => {
-    const newSocket = io();
-    setSocket(newSocket);
+    try {
+      const newSocket = io();
+      setSocket(newSocket);
 
-    return () => {
-      newSocket.close();
-    };
+      return () => {
+        newSocket.close();
+      };
+    } catch (error) {
+      console.error('Socket.io connection failed:', error);
+    }
   }, []);
 
   useEffect(() => {
@@ -73,7 +77,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   useEffect(() => {
     if (user?.shopId) {
       const unsubscribe = subscribeToBotUsers((botUsers) => {
-        const shopBotUsers = botUsers.filter(u => (u as any).shopId === user.shopId || (user.shopId && u.id.startsWith(user.shopId)));
+        const shopBotUsers = botUsers.filter(u => (u as any).shopId === user.shopId || u.id.startsWith(user.shopId));
         
         if (isInitialLoad.current) {
           shopBotUsers.forEach(u => lastBotUserIds.current.add(u.id));
