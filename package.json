@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "NODE_ENV=production node server.ts",
+    "vps": "npm run build && npm run start",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",

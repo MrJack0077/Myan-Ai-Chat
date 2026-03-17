@@ -39,10 +39,10 @@ Docker makes it easy to run the app in a consistent environment.
 2. **Clone the repository** to your VPS.
 3. **Install dependencies:**
    `npm install`
-4. **Build the frontend:**
-   `npm run build`
-5. **Start the production server:**
-   `npm start`
+4. **Build and Start in one command:**
+   `npm run vps`
+
+This command will automatically build the frontend and start the production server.
 
 ### Environment Variables
 
