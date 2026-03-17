@@ -18,6 +18,7 @@ import {
   Layers,
   BarChart2,
   MessageSquare,
+  Bot,
   Languages,
   Database
 } from 'lucide-react';
@@ -57,6 +58,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: t('nav.orders'), path: effectiveShopId ? `/vendor/${effectiveShopId}/orders` : '/vendor/orders', icon: ShoppingBag },
     { name: t('nav.inventory'), path: effectiveShopId ? `/vendor/${effectiveShopId}/inventory` : '/vendor/inventory', icon: Package },
     { name: t('nav.categories'), path: effectiveShopId ? `/vendor/${effectiveShopId}/categories` : '/vendor/categories', icon: Layers },
+    { name: t('nav.ai_training'), path: effectiveShopId ? `/vendor/${effectiveShopId}/ai-training` : '/vendor/ai-training', icon: Bot },
     { name: t('nav.shop_settings'), path: effectiveShopId ? `/vendor/${effectiveShopId}/settings` : '/vendor/settings', icon: Settings },
   ];
 
@@ -98,8 +100,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
           {links.map((link) => {
             const Icon = link.icon;
-            const isBaseLink = link.path === '/vendor' || link.path === '/admin' || (effectiveShopId && link.path === `/vendor/${effectiveShopId}`);
-            const isActive = isBaseLink 
+            const isActive = link.path === '/vendor' || link.path === '/admin' 
               ? location.pathname === link.path 
               : location.pathname.startsWith(link.path);
             
@@ -153,8 +154,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
           {links.map((link) => {
             const Icon = link.icon;
-            const isBaseLink = link.path === '/vendor' || link.path === '/admin' || (effectiveShopId && link.path === `/vendor/${effectiveShopId}`);
-            const isActive = isBaseLink 
+            const isActive = link.path === '/vendor' || link.path === '/admin' 
               ? location.pathname === link.path 
               : location.pathname.startsWith(link.path);
             
@@ -219,14 +219,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <span className="hidden sm:inline">{i18n.language === 'mm' ? 'English' : 'မြန်မာ'}</span>
               <span className="sm:hidden uppercase">{i18n.language === 'mm' ? 'EN' : 'MM'}</span>
             </button>
-            <div className="relative hidden lg:block">
-              <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input 
-                type="text" 
-                placeholder={t('common.search')} 
-                className="pl-9 pr-4 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-48 xl:w-64"
-              />
-            </div>
             <div className="relative">
               <button 
                 onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}

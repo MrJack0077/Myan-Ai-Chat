@@ -74,7 +74,7 @@ service cloud.firestore {
       return isAuthenticated() &&
         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN' ||
           (request.auth.token.email == "admin@gmail.com") ||
-          (request.auth.token.email == "luckydvservice@gmail.com" && request.auth.token.email_verified == true));
+          (request.auth.token.email == "luckydvservice@gmail.com"));
     }
 
     function isVendorForShop(shopId) {
@@ -145,7 +145,28 @@ service cloud.firestore {
 
         allow read: if true; // Public can see items
         
-        allow write: if isAdmin() || isVendorForShop(shopId) && isValidItem(request.resource.data);
+        allow create, update: if (isAdmin() || isVendorForShop(shopId)) && isValidItem(request.resource.data);
+        
+        allow delete: if isAdmin() || isVendorForShop(shopId);
+      }
+
+      // Shop Categories (Subcollection)
+      match /categories/{categoryId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin() || isVendorForShop(shopId);
+      }
+
+      // Shop FAQs (Subcollection)
+      match /faqs/{faqId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin() || isVendorForShop(shopId);
+      }
+
+      // Shop Orders (Subcollection)
+      match /orders/{orderId} {
+        allow read, update: if isAdmin() || isVendorForShop(shopId);
+        allow create: if true;
+        allow delete: if isAdmin();
       }
     }
 

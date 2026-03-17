@@ -1,0 +1,10 @@
+{
+  "projectId": "myanaichat",
+  "appId": "1:477948430696:web:a316b47db8ef6042f3eedd",
+  "apiKey": "AIzaSyDVVx6Jx09nD-Elh4IowM4GE6lZ6c0m5LM",
+  "authDomain": "myanaichat.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-70996eaf-01fc-44c0-955d-499caa61d749",
+  "storageBucket": "myanaichat.firebasestorage.app",
+  "messagingSenderId": "477948430696",
+  "measurementId": ""
+}

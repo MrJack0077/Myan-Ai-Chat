@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { GoogleGenAI } from "@google/genai";
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { 
   collection, 
   doc, 
@@ -13,11 +14,11 @@ import {
   deleteDoc,
   onSnapshot,
   orderBy,
-  updateDoc
+  updateDoc,
+  vector
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Shop, VendorItem, FAQ, ShopAIConfig, Category, Order, OrderStatus, OrderItem, PaymentStatus } from '../types';
-import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 
 // Secondary Firebase App for creating users without affecting admin session
 const secondaryFirebaseConfig = {
@@ -157,20 +158,13 @@ export const getItems = async (shopId: string): Promise<VendorItem[]> => {
 
 export const saveItem = async (shopId: string, item: Partial<VendorItem>) => {
   // Prepare item data for embedding
-  const textToEmbed = `
-    Item Name: ${item.name || ''}
-    Category: ${item.category || ''}
-    Price: ${item.price || ''}
-    Description: ${item.description || ''}
-    Specs: ${item.specifications || ''}
-    AI Description: ${item.ai_custom_description || ''}
-    Keywords: ${item.ai_keywords || ''}
-  `.trim();
+  const status = (item.is_available && (item.stock_quantity || 0) > 0) ? "Available" : "Out of Stock";
+  const textToEmbed = `Product: ${item.name || ''}. Price: ${item.price || 0} MMK. Status: ${status}. Description: ${item.description || ''}.`.trim();
 
   let embedding: number[] | undefined = item.embedding && item.embedding.length > 0 ? item.embedding : undefined;
   
   try {
-    if (!embedding && textToEmbed.length > 10) {
+    if (!embedding && textToEmbed.length > 5) {
       embedding = await generateEmbedding(textToEmbed);
     }
   } catch (error) {
@@ -178,24 +172,36 @@ export const saveItem = async (shopId: string, item: Partial<VendorItem>) => {
   }
 
   // Determine the document ID
-  // If item.id exists, use it. Otherwise, generate from name or use random.
   const itemId = item.id || (item.name ? generateSlug(item.name) : Math.random().toString(36).substring(7));
   const docRef = doc(db, 'shops', shopId, 'items', itemId);
 
   const finalItem = { 
     ...item,
-    id: itemId, // Ensure ID is stored in the doc
+    id: itemId,
     updated_at: new Date().toISOString(),
-    ...(embedding ? { embedding } : {})
+    ...(embedding ? { embedding: vector(embedding) } : {})
   };
 
-  // Add creation fields for new items
   if (!item.id) {
     (finalItem as any).created_at = new Date().toISOString();
     (finalItem as any).status = item.status || 'active';
   }
 
   await setDoc(docRef, finalItem, { merge: true });
+
+  // Clear semantic cache to ensure AI doesn't remember old data
+  try {
+    const cacheRef = collection(db, "shops", shopId, "semantic_cache");
+    const cacheSnapshot = await getDocs(cacheRef);
+    const deletePromises = cacheSnapshot.docs.map((cacheDoc) => 
+      deleteDoc(doc(db, "shops", shopId, "semantic_cache", cacheDoc.id))
+    );
+    await Promise.all(deletePromises);
+    console.log("🧹 Semantic cache cleared.");
+  } catch (cacheError) {
+    console.error("Failed to clear semantic cache:", cacheError);
+  }
+
   return itemId;
 };
 
@@ -205,8 +211,19 @@ export const generateEmbedding = async (text: string): Promise<number[]> => {
   const result = await ai.models.embedContent({
     model: 'gemini-embedding-2-preview',
     contents: [text],
+    config: {
+      outputDimensionality: 768
+    }
   });
-  return result.embeddings[0].values;
+  
+  let embeddingArray = result.embeddings[0].values;
+  
+  // Ensure it doesn't exceed 768 dimensions as a safety measure
+  if (embeddingArray.length > 768) {
+    embeddingArray = embeddingArray.slice(0, 768);
+  }
+  
+  return embeddingArray;
 };
 
 export const updateItemEmbedding = async (shopId: string, itemId: string) => {
@@ -233,15 +250,13 @@ export const updateItemEmbedding = async (shopId: string, itemId: string) => {
 
 /**
  * Performs a semantic search for items.
- * Note: In a production environment with many items, 
- * you should use Firestore's native vector search (Vector Query).
  */
 export const searchInventoryRAG = async (shopId: string, query: string, limitCount: number = 5): Promise<VendorItem[]> => {
   try {
     const queryEmbedding = await generateEmbedding(query);
     const items = await getItems(shopId);
     
-    // Simple cosine similarity calculation (client-side for small/medium datasets)
+    // Simple cosine similarity calculation
     const scoredItems = items
       .filter(item => item.embedding && item.status === 'active')
       .map(item => {
@@ -271,8 +286,13 @@ export const reindexShopInventory = async (shopId: string) => {
 };
 
 export const deleteItem = async (shopId: string, itemId: string) => {
-  const docRef = doc(db, 'shops', shopId, 'items', itemId);
-  await deleteDoc(docRef);
+  const path = `shops/${shopId}/items/${itemId}`;
+  try {
+    const docRef = doc(db, 'shops', shopId, 'items', itemId);
+    await deleteDoc(docRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
 };
 
 export const subscribeToItems = (shopId: string, callback: (items: VendorItem[]) => void) => {
@@ -342,8 +362,13 @@ export const addCategory = async (shopId: string, name: string) => {
 };
 
 export const deleteCategory = async (shopId: string, categoryId: string) => {
-  const docRef = doc(db, 'shops', shopId, 'categories', categoryId);
-  await deleteDoc(docRef);
+  const path = `shops/${shopId}/categories/${categoryId}`;
+  try {
+    const docRef = doc(db, 'shops', shopId, 'categories', categoryId);
+    await deleteDoc(docRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
 };
 
 // Orders
@@ -442,7 +467,7 @@ export const updateOrderStatus = async (shopId: string, orderId: string, status:
     if (orderSnap.exists()) {
       const orderData = orderSnap.data() as Order;
       for (const item of orderData.items) {
-        if (item.itemId && item.itemId !== 'bot-generated') {
+        if (typeof item !== 'string' && item.itemId && item.itemId !== 'bot-generated') {
           const itemRef = doc(db, 'shops', shopId, 'items', item.itemId);
           const itemSnap = await getDoc(itemRef);
           if (itemSnap.exists()) {

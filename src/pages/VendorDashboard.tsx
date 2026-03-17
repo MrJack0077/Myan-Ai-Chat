@@ -14,9 +14,7 @@ import {
   Database,
   MessageSquare,
   Settings,
-  FileJson,
-  RefreshCw,
-  Sparkles
+  FileJson
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { 
@@ -31,8 +29,7 @@ import {
   deleteItem,
   saveFAQ,
   saveShop,
-  bulkSaveItems,
-  searchInventoryRAG
+  bulkSaveItems
 } from '../services/firebaseService';
 import { VendorItem, Category, FAQ, Shop, Order } from '../types';
 import VendorStats from '../components/vendor/VendorStats';
@@ -79,13 +76,12 @@ export default function VendorDashboard() {
   const [isTypeSelectionOpen, setIsTypeSelectionOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<VendorItem | null>(null);
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterStock, setFilterStock] = useState<'all' | 'low' | 'out'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isSemanticSearch, setIsSemanticSearch] = useState(false);
-  const [semanticResults, setSemanticResults] = useState<VendorItem[] | null>(null);
-  const [isSearching, setIsSearching] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -99,7 +95,7 @@ export default function VendorDashboard() {
     subcategory: '',
     ai_keywords: '',
     ai_metadata: '',
-    stock_type: 'count' as 'count' | 'status' | 'count',
+    stock_type: 'count' as 'count' | 'status',
     stock_quantity: '',
     is_available: true,
     duration: '',
@@ -204,19 +200,29 @@ export default function VendorDashboard() {
   };
 
   const handleDeleteCategory = async (id: string) => {
-    if (!confirm('Are you sure? Items in this category will remain but the category will be deleted.')) return;
+    setCategoryToDelete(id);
+  };
+
+  const confirmDeleteCategory = async () => {
+    if (!categoryToDelete) return;
+    setIsSaving(true);
     try {
-      await deleteCategory(effectiveShopId || '', id);
+      await deleteCategory(effectiveShopId || '', categoryToDelete);
+      showToast('Category deleted successfully', 'success');
+      setCategoryToDelete(null);
       fetchData();
     } catch (error) {
       console.error('Failed to delete category:', error);
+      showToast('Failed to delete category', 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleEdit = (item: VendorItem) => {
     setEditingItem(item);
     setFormData({
-      item_type: item.item_type || 'product',
+      item_type: item.item_type,
       name: item.name,
       price: item.price.toString(),
       description: item.description || '',
@@ -224,7 +230,7 @@ export default function VendorDashboard() {
       subcategory: item.subcategory || '',
       ai_keywords: item.ai_keywords || '',
       ai_metadata: item.ai_metadata || '',
-      stock_type: (item.stock_type as any) || 'count',
+      stock_type: item.stock_type || 'count',
       stock_quantity: item.stock_quantity?.toString() || '',
       is_available: item.is_available !== undefined ? item.is_available : true,
       duration: item.duration || '',
@@ -305,12 +311,22 @@ export default function VendorDashboard() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this item?')) return;
+    setItemToDelete(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
+    setIsSaving(true);
     try {
-      await deleteItem(effectiveShopId || '', id);
+      await deleteItem(effectiveShopId || '', itemToDelete);
+      showToast('Item deleted successfully', 'success');
+      setItemToDelete(null);
       fetchData();
     } catch (error) {
       console.error('Failed to delete item:', error);
+      showToast('Failed to delete item', 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -339,37 +355,18 @@ export default function VendorDashboard() {
     }
   };
 
-  const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const query = e.target.value;
-    setSearchQuery(query);
-    
-    if (isSemanticSearch && query.length > 2) {
-      setIsSearching(true);
-      try {
-        const results = await searchInventoryRAG(effectiveShopId || '', query, 10);
-        setSemanticResults(results);
-      } catch (error) {
-        console.error('Semantic search failed:', error);
-      } finally {
-        setIsSearching(false);
-      }
-    } else {
-      setSemanticResults(null);
-    }
-  };
-
-  const filteredItems = semanticResults || items.filter(item => {
+  const filteredItems = items.filter(item => {
     const matchesCategory = filterCategory === 'All' || item.category === filterCategory;
     const matchesSearch = (item.name?.toLowerCase() || '').includes(searchQuery.toLowerCase());
     const matchesStock = filterStock === 'all' 
       ? true 
       : filterStock === 'low' 
-        ? (item.item_type === 'product' && item.stock_type === 'count' && (item.stock_quantity || 0) > 0 && (item.stock_quantity || 0) <= 5)
-        : (item.item_type === 'product' && ((item.stock_type === 'count' && (item.stock_quantity || 0) === 0) || (item.stock_type === 'status' && !item.is_available)));
+        ? (item.item_type === 'product' && item.stock_type === 'count' && item.stock_quantity > 0 && item.stock_quantity <= 5)
+        : (item.item_type === 'product' && ((item.stock_type === 'count' && item.stock_quantity === 0) || (item.stock_type === 'status' && !item.is_available)));
     return matchesCategory && matchesSearch && matchesStock;
   });
 
-  const lowStockItems = items.filter(item => item.item_type === 'product' && (item.stock_quantity || 0) <= 5);
+  const lowStockItems = items.filter(item => item.item_type === 'product' && item.stock_quantity <= 5);
 
   const getCurrencySymbol = (code: string) => {
     switch (code) {
@@ -511,6 +508,66 @@ export default function VendorDashboard() {
 
       {/* Main Content Area */}
       <div className="flex-1">
+        {/* Delete Confirmation Modal */}
+        {itemToDelete && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+            <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-2xl max-w-sm w-full text-center space-y-6">
+              <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto">
+                <AlertCircle className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-zinc-900">Confirm Delete</h3>
+                <p className="text-zinc-500 mt-2">Are you sure you want to delete this item? This action cannot be undone.</p>
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setItemToDelete(null)}
+                  className="flex-1 py-3 bg-zinc-100 text-zinc-700 rounded-xl font-bold hover:bg-zinc-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmDelete}
+                  disabled={isSaving}
+                  className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all disabled:opacity-50"
+                >
+                  {isSaving ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Category Delete Confirmation Modal */}
+        {categoryToDelete && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+            <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-2xl max-w-sm w-full text-center space-y-6">
+              <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto">
+                <AlertCircle className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-zinc-900">Delete Category</h3>
+                <p className="text-zinc-500 mt-2">Are you sure? Items in this category will remain but the category will be deleted.</p>
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setCategoryToDelete(null)}
+                  className="flex-1 py-3 bg-zinc-100 text-zinc-700 rounded-xl font-bold hover:bg-zinc-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmDeleteCategory}
+                  disabled={isSaving}
+                  className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all disabled:opacity-50"
+                >
+                  {isSaving ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
             <VendorStats analytics={analytics} />
@@ -597,34 +654,13 @@ export default function VendorDashboard() {
                 <Search className="w-5 h-5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input 
                   type="text" 
-                  placeholder={isSemanticSearch ? "Describe what you're looking for..." : t('inventory.search_placeholder')} 
+                  placeholder={t('inventory.search_placeholder')} 
                   value={searchQuery}
-                  onChange={handleSearch}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                 />
-                {isSearching && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <RefreshCw className="w-4 h-4 text-indigo-600 animate-spin" />
-                  </div>
-                )}
               </div>
               <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setIsSemanticSearch(!isSemanticSearch);
-                    setSemanticResults(null);
-                    setSearchQuery('');
-                  }}
-                  className={cn(
-                    "px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all border",
-                    isSemanticSearch 
-                      ? "bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100" 
-                      : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
-                  )}
-                >
-                  <Sparkles className={cn("w-4 h-4", isSemanticSearch ? "animate-pulse" : "")} />
-                  {isSemanticSearch ? "Semantic Search ON" : "AI Search"}
-                </button>
                 <div className="relative">
                   <select 
                     value={filterStock}

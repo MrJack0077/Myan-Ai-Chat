@@ -11,6 +11,7 @@ export default function FAQManager({ shopId }: { shopId: string }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingFaq, setEditingFaq] = useState<FAQ | null>(null);
+  const [faqToDelete, setFaqToDelete] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     question: '',
     answer: '',
@@ -57,10 +58,15 @@ export default function FAQManager({ shopId }: { shopId: string }) {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm(t('faqs.delete_confirm'))) return;
+  const handleDelete = (id: string) => {
+    setFaqToDelete(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!faqToDelete) return;
     try {
-      await deleteFAQ(shopId, id);
+      await deleteFAQ(shopId, faqToDelete);
+      setFaqToDelete(null);
       fetchFaqs();
     } catch (error) {
       console.error('Failed to delete FAQ:', error);
@@ -205,6 +211,36 @@ export default function FAQManager({ shopId }: { shopId: string }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* FAQ Delete Confirmation Modal */}
+      {faqToDelete && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-zinc-900/40 backdrop-blur-sm" onClick={() => setFaqToDelete(null)}></div>
+          <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-2xl max-w-sm w-full text-center space-y-6 relative z-10">
+            <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto">
+              <Trash2 className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-zinc-900">Delete FAQ</h3>
+              <p className="text-zinc-500 mt-2">{t('faqs.delete_confirm')}</p>
+            </div>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setFaqToDelete(null)}
+                className="flex-1 py-3 bg-zinc-100 text-zinc-700 rounded-xl font-bold hover:bg-zinc-200 transition-all"
+              >
+                {t('common.cancel')}
+              </button>
+              <button 
+                onClick={confirmDelete}
+                className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all"
+              >
+                {t('common.actions')}
+              </button>
+            </div>
           </div>
         </div>
       )}

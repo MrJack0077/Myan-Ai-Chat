@@ -80,7 +80,6 @@ export default function OrderManager({ shopId, currency = 'USD' }: { shopId: str
     items: [],
     totalAmount: 0,
     status: 'pending',
-    paymentStatus: 'unpaid',
     notes: ''
   });
 
@@ -198,15 +197,21 @@ export default function OrderManager({ shopId, currency = 'USD' }: { shopId: str
     doc.setFontSize(10);
     doc.text(order.customerName, 20, 58);
     doc.text(order.customerPhone, 20, 64);
-    doc.text(order.shippingAddress, 20, 70, { maxWidth: 80 });
+    doc.text(order.customer_address || order.shippingAddress || 'No address', 20, 70, { maxWidth: 80 });
 
     // Table
-    const tableData = order.items.map(item => [
-      item.name + (item.subItemName ? ` (${item.subItemName})` : ''),
-      item.quantity.toString(),
-      `${symbol}${item.price.toFixed(2)}`,
-      `${symbol}${(item.quantity * item.price).toFixed(2)}`
-    ]);
+    const tableData = order.items.map(item => {
+      const isStringItem = typeof item === 'string';
+      const name = isStringItem ? item : item.name + (item.subItemName ? ` (${item.subItemName})` : '');
+      const quantity = isStringItem ? 1 : item.quantity;
+      const price = isStringItem ? 0 : item.price;
+      return [
+        name,
+        quantity.toString(),
+        `${symbol}${price.toFixed(2)}`,
+        `${symbol}${(quantity * price).toFixed(2)}`
+      ];
+    });
 
     autoTable(doc, {
       startY: 85,
@@ -219,9 +224,17 @@ export default function OrderManager({ shopId, currency = 'USD' }: { shopId: str
 
     const finalY = (doc as any).lastAutoTable.finalY + 10;
 
+    // Deli Charge
+    let currentY = finalY;
+    if (order.deli_charge !== undefined) {
+      doc.setFontSize(10);
+      doc.text(`Delivery Charge: ${symbol}${order.deli_charge.toFixed(2)}`, pageWidth - 20, currentY, { align: 'right' });
+      currentY += 7;
+    }
+
     // Total
     doc.setFontSize(14);
-    doc.text(`Total Amount: ${symbol}${order.totalAmount.toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
+    doc.text(`Total Amount: ${symbol}${(order.total_price || order.totalAmount).toFixed(2)}`, pageWidth - 20, currentY, { align: 'right' });
 
     // Footer
     doc.setFontSize(10);
@@ -229,6 +242,73 @@ export default function OrderManager({ shopId, currency = 'USD' }: { shopId: str
     doc.text('Thank you for your business!', pageWidth / 2, finalY + 30, { align: 'center' });
 
     doc.save(`receipt-${order.id.slice(-6)}.pdf`);
+  };
+
+  const handleAddSampleData = async () => {
+    if (availableItems.length === 0) {
+      showToast('Please add some products first', 'error');
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      const sampleOrders = [
+        {
+          customerName: 'Aung Kyaw',
+          customerPhone: '09123456789',
+          customerEmail: 'aung@example.com',
+          shippingAddress: 'No. 123, Pyay Road, Yangon',
+          items: [
+            {
+              id: Math.random().toString(36).substr(2, 9),
+              itemId: availableItems[0].id,
+              name: availableItems[0].name,
+              price: availableItems[0].price,
+              quantity: 2,
+              imageUrl: availableItems[0].image_url || ''
+            }
+          ],
+          status: 'pending' as OrderStatus,
+          notes: 'Please deliver in the evening'
+        },
+        {
+          customerName: 'Ma Ma',
+          customerPhone: '09987654321',
+          customerEmail: 'mama@example.com',
+          shippingAddress: 'No. 45, Mandalay-Lashio Road, Mandalay',
+          items: [
+            {
+              id: Math.random().toString(36).substr(2, 9),
+              itemId: availableItems[availableItems.length > 1 ? 1 : 0].id,
+              name: availableItems[availableItems.length > 1 ? 1 : 0].name,
+              price: availableItems[availableItems.length > 1 ? 1 : 0].price,
+              quantity: 1,
+              imageUrl: availableItems[availableItems.length > 1 ? 1 : 0].image_url || ''
+            }
+          ],
+          status: 'processing' as OrderStatus,
+          notes: ''
+        }
+      ];
+
+      for (const sample of sampleOrders) {
+        const total = sample.items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+        await createOrder(shopId, {
+          ...sample,
+          shopId,
+          totalAmount: total,
+          paymentStatus: 'pending' as PaymentStatus
+        } as any);
+      }
+
+      showToast('Sample orders added successfully', 'success');
+      fetchOrders();
+    } catch (error) {
+      console.error('Failed to add sample data:', error);
+      showToast('Failed to add sample data', 'error');
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   const handleCreateOrder = async (e: React.FormEvent) => {
@@ -251,7 +331,6 @@ export default function OrderManager({ shopId, currency = 'USD' }: { shopId: str
         items: [],
         totalAmount: 0,
         status: 'pending',
-        paymentStatus: 'unpaid',
         notes: ''
       });
       fetchOrders();
@@ -392,6 +471,14 @@ export default function OrderManager({ shopId, currency = 'USD' }: { shopId: str
             <Clock className="w-5 h-5" />
           </button>
           <button 
+            onClick={handleAddSampleData}
+            disabled={isUpdating || availableItems.length === 0}
+            className="px-4 py-2.5 bg-white border border-zinc-200 text-zinc-600 rounded-2xl text-sm font-bold hover:bg-zinc-50 transition-all flex items-center gap-2 whitespace-nowrap disabled:opacity-50"
+          >
+            <History className="w-4 h-4" />
+            Add Sample Data
+          </button>
+          <button 
             onClick={() => setIsCreateModalOpen(true)}
             className="px-4 py-2.5 bg-indigo-600 text-white rounded-2xl text-sm font-bold hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg shadow-indigo-100 whitespace-nowrap"
           >
@@ -501,7 +588,7 @@ export default function OrderManager({ shopId, currency = 'USD' }: { shopId: str
                         <p className="text-sm text-zinc-600">{new Date(order.createdAt).toLocaleDateString()}</p>
                       </td>
                       <td className="px-6 py-4">
-                        <p className="text-sm font-bold text-zinc-900">{symbol}{order.totalAmount.toFixed(2)}</p>
+                        <p className="text-sm font-bold text-zinc-900">{symbol}{(order.total_price || order.totalAmount).toFixed(2)}</p>
                       </td>
                       <td className="px-6 py-4">
                         <span className={cn(
@@ -818,30 +905,45 @@ export default function OrderManager({ shopId, currency = 'USD' }: { shopId: str
                       {t('orders.items')}
                     </h4>
                     <div className="space-y-3">
-                      {selectedOrder.items.map((item, idx) => (
-                        <div key={idx} className="flex items-center gap-4 p-4 bg-zinc-50 rounded-2xl border border-zinc-100">
-                          <div className="w-16 h-16 bg-white rounded-xl border border-zinc-100 flex items-center justify-center overflow-hidden shrink-0">
-                            {item.imageUrl ? (
-                              <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <Package className="w-6 h-6 text-zinc-300" />
-                            )}
+                      {selectedOrder.items.map((item, idx) => {
+                        const isStringItem = typeof item === 'string';
+                        const name = isStringItem ? item : item.name;
+                        const price = isStringItem ? 0 : item.price;
+                        const quantity = isStringItem ? 1 : item.quantity;
+                        const imageUrl = isStringItem ? null : item.imageUrl;
+                        const subItemName = isStringItem ? null : item.subItemName;
+
+                        return (
+                          <div key={idx} className="flex items-center gap-4 p-4 bg-zinc-50 rounded-2xl border border-zinc-100">
+                            <div className="w-16 h-16 bg-white rounded-xl border border-zinc-100 flex items-center justify-center overflow-hidden shrink-0">
+                              {imageUrl ? (
+                                <img src={imageUrl} alt={name} className="w-full h-full object-cover" />
+                              ) : (
+                                <Package className="w-6 h-6 text-zinc-300" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-zinc-900 truncate">{name}</p>
+                              {subItemName && <p className="text-xs text-zinc-500">{subItemName}</p>}
+                              <p className="text-xs text-zinc-400 mt-1">{quantity} x {symbol}{price.toFixed(2)}</p>
+                            </div>
+                            <p className="text-sm font-bold text-zinc-900">{symbol}{(quantity * price).toFixed(2)}</p>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-zinc-900 truncate">{item.name}</p>
-                            {item.subItemName && <p className="text-xs text-zinc-500">{item.subItemName}</p>}
-                            <p className="text-xs text-zinc-400 mt-1">{item.quantity} x {symbol}{item.price.toFixed(2)}</p>
-                          </div>
-                          <p className="text-sm font-bold text-zinc-900">{symbol}{(item.quantity * item.price).toFixed(2)}</p>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
 
-                  <div className="pt-6 border-t border-zinc-100">
+                  <div className="pt-6 border-t border-zinc-100 space-y-2">
+                    {selectedOrder.deli_charge !== undefined && (
+                      <div className="flex justify-between items-center text-sm text-zinc-500">
+                        <span>Delivery Charge</span>
+                        <span>{symbol}{selectedOrder.deli_charge.toFixed(2)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between items-center text-lg font-bold text-zinc-900">
                       <span>{t('orders.total')}</span>
-                      <span>{symbol}{selectedOrder.totalAmount.toFixed(2)}</span>
+                      <span>{symbol}{(selectedOrder.total_price || selectedOrder.totalAmount).toFixed(2)}</span>
                     </div>
                   </div>
 
@@ -859,16 +961,16 @@ export default function OrderManager({ shopId, currency = 'USD' }: { shopId: str
                       Payment Verification
                     </h4>
                     
-                    {selectedOrder.paymentScreenshotUrl ? (
+                    {(selectedOrder.paymentScreenshotUrl || selectedOrder.payment_slip_url) ? (
                       <div className="space-y-4">
                         <div className="aspect-video bg-zinc-100 rounded-2xl border border-zinc-200 overflow-hidden relative group">
                           <img 
-                            src={selectedOrder.paymentScreenshotUrl} 
+                            src={selectedOrder.paymentScreenshotUrl || selectedOrder.payment_slip_url} 
                             alt="Payment Proof" 
                             className="w-full h-full object-contain"
                           />
                           <a 
-                            href={selectedOrder.paymentScreenshotUrl} 
+                            href={selectedOrder.paymentScreenshotUrl || selectedOrder.payment_slip_url} 
                             target="_blank" 
                             rel="noopener noreferrer"
                             className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold gap-2"
@@ -951,7 +1053,9 @@ export default function OrderManager({ shopId, currency = 'USD' }: { shopId: str
                       )}
                       <div className="flex items-start gap-3">
                         <MapPin className="w-4 h-4 text-zinc-400 mt-0.5" />
-                        <p className="text-sm text-zinc-600 leading-relaxed">{selectedOrder.shippingAddress}</p>
+                        <p className="text-sm text-zinc-600 leading-relaxed">
+                          {selectedOrder.customer_address || selectedOrder.shippingAddress || 'No address provided'}
+                        </p>
                       </div>
                     </div>
                   </div>
