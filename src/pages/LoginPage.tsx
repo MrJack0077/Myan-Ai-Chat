@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LogIn, Shield, Store } from 'lucide-react';
+import { LogIn, ShieldCheck, Store } from 'lucide-react';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
@@ -159,7 +159,7 @@ export default function LoginPage() {
               className="text-center p-4 rounded-xl hover:bg-zinc-50 transition-all group"
             >
               <div className="flex justify-center mb-2">
-                <Shield className="w-5 h-5 text-indigo-600 group-hover:scale-110 transition-transform" />
+                <ShieldCheck className="w-5 h-5 text-indigo-600 group-hover:scale-110 transition-transform" />
               </div>
               <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{t('login.quick_admin')}</span>
               <p className="text-[10px] text-zinc-500 mt-1">admin@gmail.com</p>
@@ -167,7 +167,7 @@ export default function LoginPage() {
             <button
               onClick={() => {
                 setEmail('vendor@example.com');
-                setPassword('password');
+                setPassword('password123');
                 setTimeout(() => document.querySelector('form')?.requestSubmit(), 0);
               }}
               className="text-center p-4 rounded-xl hover:bg-zinc-50 transition-all group"

@@ -1,143 +1,83 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
-import ProtectedRoute from './components/ProtectedRoute';
-import DashboardLayout from './components/DashboardLayout';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ToastProvider } from './components/Toast';
 import LoginPage from './pages/LoginPage';
 import AdminDashboard from './pages/AdminDashboard';
-import SupportPage from './pages/SupportPage';
 import VendorDashboard from './pages/VendorDashboard';
 import ShopsPage from './pages/ShopsPage';
-import { ToastProvider } from './components/Toast';
+import SupportPage from './pages/SupportPage';
+import OrderTracking from './pages/OrderTracking';
+import './i18n';
 
-export default function App() {
+function PrivateRoute({ children, role }: { children: React.ReactNode, role?: 'ADMIN' | 'VENDOR' }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50">
+        <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+
+  if (role && user.role !== role) {
+    return <Navigate to="/" />;
+  }
+
+  return <>{children}</>;
+}
+
+function AppRoutes() {
+  const { user } = useAuth();
+
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            
-            {/* Admin Routes */}
-            <Route 
-              path="/admin" 
-              element={
-                <ProtectedRoute role="ADMIN">
-                  <DashboardLayout>
-                    <AdminDashboard />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/admin/shops" 
-              element={
-                <ProtectedRoute role="ADMIN">
-                  <DashboardLayout>
-                    <ShopsPage />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/admin/support" 
-              element={
-                <ProtectedRoute role="ADMIN">
-                  <DashboardLayout>
-                    <SupportPage />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
+    <Routes>
+      <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/" />} />
+      
+      <Route path="/" element={
+        <PrivateRoute>
+          {user?.role === 'ADMIN' ? <Navigate to="/admin" /> : <Navigate to="/vendor" />}
+        </PrivateRoute>
+      } />
 
-            {/* Vendor Routes */}
-            <Route 
-              path="/vendor/:shopId?" 
-              element={
-                <ProtectedRoute role="VENDOR">
-                  <DashboardLayout>
-                    <VendorDashboard />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/vendor/:shopId/orders" 
-              element={
-                <ProtectedRoute role="VENDOR">
-                  <DashboardLayout>
-                    <VendorDashboard />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/vendor/:shopId/inventory" 
-              element={
-                <ProtectedRoute role="VENDOR">
-                  <DashboardLayout>
-                    <VendorDashboard />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/vendor/:shopId/categories" 
-              element={
-                <ProtectedRoute role="VENDOR">
-                  <DashboardLayout>
-                    <VendorDashboard />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/vendor/:shopId/analytics" 
-              element={
-                <ProtectedRoute role="VENDOR">
-                  <DashboardLayout>
-                    <VendorDashboard />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/vendor/:shopId/reviews" 
-              element={
-                <ProtectedRoute role="VENDOR">
-                  <DashboardLayout>
-                    <VendorDashboard />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/vendor/:shopId/ai-training" 
-              element={
-                <ProtectedRoute role="VENDOR">
-                  <DashboardLayout>
-                    <VendorDashboard />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/vendor/:shopId/settings" 
-              element={
-                <ProtectedRoute role="VENDOR">
-                  <DashboardLayout>
-                    <VendorDashboard />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
+      <Route path="/admin/*" element={
+        <PrivateRoute role="ADMIN">
+          <AdminDashboard />
+        </PrivateRoute>
+      } />
 
-            {/* Default Redirects */}
-            <Route path="/" element={<Navigate to="/login" replace />} />
-            <Route path="*" element={<Navigate to="/login" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
-    </ToastProvider>
+      <Route path="/vendor/*" element={
+        <PrivateRoute role="VENDOR">
+          <VendorDashboard />
+        </PrivateRoute>
+      } />
+
+      <Route path="/shops" element={<ShopsPage />} />
+      <Route path="/support" element={<SupportPage />} />
+      <Route path="/track" element={<OrderTracking />} />
+      
+      <Route path="*" element={<Navigate to="/" />} />
+    </Routes>
   );
 }
+
+function App() {
+  return (
+    <Router>
+      <AuthProvider>
+        <ToastProvider>
+          <div className="min-h-screen bg-zinc-50">
+            <AppRoutes />
+          </div>
+        </ToastProvider>
+      </AuthProvider>
+    </Router>
+  );
+}
+
+export default App;

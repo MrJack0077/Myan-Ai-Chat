@@ -8,10 +8,22 @@ interface InventoryGridProps {
   onEdit: (item: VendorItem) => void;
   onDelete: (id: string) => void;
   onToggleStatus: (item: VendorItem) => void;
+  currency?: string;
 }
 
-export default function InventoryGrid({ items, onEdit, onDelete, onToggleStatus }: InventoryGridProps) {
+export default function InventoryGrid({ items, onEdit, onDelete, onToggleStatus, currency = 'USD' }: InventoryGridProps) {
   const { t } = useTranslation();
+
+  const getCurrencySymbol = (code: string) => {
+    switch (code) {
+      case 'MMK': return 'Ks';
+      case 'THB': return '฿';
+      case 'USD': return '$';
+      default: return '$';
+    }
+  };
+
+  const symbol = getCurrencySymbol(currency);
   const isAIReady = (item: VendorItem) => {
     return !!(item.ai_custom_description || item.specifications || item.usage_instructions);
   };
@@ -94,7 +106,7 @@ export default function InventoryGrid({ items, onEdit, onDelete, onToggleStatus 
                   <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-100 text-red-700">
                     {t('common.out_of_stock')}
                   </span>
-                ) : item.item_type === 'product' && item.stock_type === 'count' && item.stock_quantity <= 5 && (
+                ) : item.item_type === 'product' && item.stock_type === 'count' && (item.stock_quantity || 0) <= 5 && (
                   <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 animate-pulse">
                     {t('dashboard.low_stock')}
                   </span>
@@ -118,8 +130,8 @@ export default function InventoryGrid({ items, onEdit, onDelete, onToggleStatus 
               <div>
                 <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">{t('common.price')}</p>
                 <div className="flex items-center gap-1 text-zinc-900 font-bold">
-                  <DollarSign className="w-4 h-4" />
-                  {Number(item.price).toFixed(2)}
+                  <span className="text-sm">{symbol}</span>
+                  {Number(item.price).toLocaleString()}
                 </div>
               </div>
               <div>

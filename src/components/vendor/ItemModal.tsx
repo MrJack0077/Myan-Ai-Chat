@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Plus, X, Info, Sparkles, Settings, ShieldCheck, Layers, Trash2, DollarSign, Tag } from 'lucide-react';
+import { Plus, X, Info, Settings, ShieldCheck, Layers, Trash2, DollarSign, Tag, CheckCircle2 } from 'lucide-react';
 import { Category, VendorItem, SubItem } from '../../types';
 import { useTranslation } from 'react-i18next';
+import { cn } from '../../lib/utils';
 
 interface ItemModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ interface ItemModalProps {
   setFormData: (data: any) => void;
   onSubmit: (e: React.FormEvent) => void;
   isSaving?: boolean;
+  currency?: string;
 }
 
 export default function ItemModal({ 
@@ -22,10 +24,22 @@ export default function ItemModal({
   formData, 
   setFormData, 
   onSubmit,
-  isSaving = false
+  isSaving = false,
+  currency = 'USD'
 }: ItemModalProps) {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'basic' | 'variations' | 'ai' | 'logistics'>('basic');
+
+  const getCurrencySymbol = (code: string) => {
+    switch (code) {
+      case 'MMK': return 'Ks';
+      case 'THB': return '฿';
+      case 'USD': return '$';
+      default: return '$';
+    }
+  };
+
+  const symbol = getCurrencySymbol(currency);
+  const [activeTab, setActiveTab] = useState<'basic' | 'variations' | 'logistics'>('basic');
   
   if (!isOpen) return null;
 
@@ -71,7 +85,6 @@ export default function ItemModal({
               <h3 className="text-2xl font-bold text-zinc-900">
                 {editingItem ? t('inventory.edit_item') : t('inventory.add_new')}
               </h3>
-              <p className="text-sm text-zinc-500">{t('inventory.ai_training_desc')}</p>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-zinc-100 rounded-full transition-all">
               <X className="w-6 h-6 text-zinc-400" />
@@ -101,16 +114,6 @@ export default function ItemModal({
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('ai')}
-              className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                activeTab === 'ai' ? 'bg-white text-indigo-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              <Sparkles className="w-4 h-4" />
-              {t('inventory.ai_knowledge')}
-            </button>
-            <button
-              type="button"
               onClick={() => setActiveTab('logistics')}
               className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${
                 activeTab === 'logistics' ? 'bg-white text-indigo-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
@@ -124,29 +127,9 @@ export default function ItemModal({
           <form onSubmit={onSubmit} className="space-y-8">
             {activeTab === 'basic' && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-100 rounded-xl">
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, item_type: 'product' })}
-                    className={`py-2 rounded-lg text-sm font-bold transition-all ${
-                      formData.item_type === 'product' ? 'bg-white text-indigo-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
-                    }`}
-                  >
-                    {t('common.product')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, item_type: 'service' })}
-                    className={`py-2 rounded-lg text-sm font-bold transition-all ${
-                      formData.item_type === 'service' ? 'bg-white text-indigo-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
-                    }`}
-                  >
-                    {t('common.service')}
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Left Column */}
+                  <div className="space-y-6">
                     <div>
                       <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.item_name')}</label>
                       <input
@@ -155,112 +138,92 @@ export default function ItemModal({
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                        placeholder="e.g. Wireless Headphones"
+                        placeholder={t('inventory.name_placeholder')}
                       />
                     </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.price')} ($)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        required
-                        value={formData.price}
-                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.stock_management')}</label>
-                      <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-100 rounded-xl">
-                        <button
-                          type="button"
-                          onClick={() => setFormData({ ...formData, stock_type: 'count' })}
-                          className={`py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
-                            formData.stock_type === 'count' ? 'bg-white text-indigo-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
-                          }`}
-                        >
-                          {t('inventory.count')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setFormData({ ...formData, stock_type: 'status' })}
-                          className={`py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
-                            formData.stock_type === 'status' ? 'bg-white text-indigo-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
-                          }`}
-                        >
-                          {t('inventory.status')}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      {formData.stock_type === 'count' ? (
-                        <>
-                          <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.quantity')}</label>
+                    <div className="flex items-end gap-4">
+                      <div className="flex-1">
+                        <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.price')} ({symbol})</label>
+                        <div className="relative">
                           <input
                             type="number"
-                            value={formData.stock_quantity}
-                            onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
+                            step="0.01"
+                            required
+                            value={formData.price}
+                            onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                             className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                            placeholder="0"
+                            placeholder={t('inventory.price_placeholder')}
                           />
-                        </>
-                      ) : (
-                        <>
-                          <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.availability')}</label>
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.stock_management')}</label>
+                        <div className="flex p-1 bg-zinc-100 rounded-xl">
                           <button
                             type="button"
-                            onClick={() => setFormData({ ...formData, is_available: !formData.is_available })}
-                            className={`w-full px-4 py-3 rounded-xl border font-bold transition-all ${
-                              formData.is_available 
-                                ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
-                                : 'bg-red-50 border-red-200 text-red-700'
+                            onClick={() => setFormData({ ...formData, stock_type: 'count' })}
+                            className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all ${
+                              formData.stock_type === 'count' ? 'bg-white text-indigo-600 shadow-sm' : 'text-zinc-500'
                             }`}
                           >
-                            {formData.is_available ? t('common.available') : t('common.out_of_stock')}
+                            {t('inventory.quantity')}
                           </button>
-                        </>
-                      )}
-                    </div>
-                    <div>
-                      {formData.item_type === 'service' ? (
-                        <>
-                          <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.duration')}</label>
-                          <input
-                            type="text"
-                            value={formData.duration}
-                            onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
-                            className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                            placeholder="e.g. 1h"
-                          />
-                        </>
-                      ) : (
-                        <div className="invisible">
-                          <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Placeholder</label>
-                          <div className="w-full px-4 py-3"></div>
+                          <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, stock_type: 'status' })}
+                            className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all ${
+                              formData.stock_type === 'status' ? 'bg-white text-indigo-600 shadow-sm' : 'text-zinc-500'
+                            }`}
+                          >
+                            {t('inventory.status')}
+                          </button>
                         </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
+
+                    {formData.stock_type === 'count' ? (
+                      <div>
+                        <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.quantity')}</label>
+                        <input
+                          type="number"
+                          value={formData.stock_quantity}
+                          onChange={(e) => setFormData({ ...formData, stock_quantity: parseInt(e.target.value) })}
+                          className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                          placeholder={t('inventory.quantity_placeholder')}
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.availability')}</label>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, is_available: !formData.is_available })}
+                          className={`w-full px-4 py-3 rounded-xl border font-bold transition-all flex items-center justify-center gap-2 ${
+                            formData.is_available 
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                              : 'bg-red-50 border-red-200 text-red-700'
+                          }`}
+                        >
+                          {formData.is_available ? t('common.available') : t('common.out_of_stock')}
+                        </button>
+                      </div>
+                    )}
 
                     <div>
                       <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.brand')}</label>
                       <input
                         type="text"
-                        value={formData.brand}
+                        value={formData.brand || ''}
                         onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
                         className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                        placeholder="e.g. Sony, Apple, Local Artisan"
+                        placeholder={t('inventory.brand_placeholder')}
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-4">
+                  {/* Right Column */}
+                  <div className="space-y-6">
                     <div>
                       <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.category')}</label>
                       <select
@@ -268,6 +231,7 @@ export default function ItemModal({
                         onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                         className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all bg-white"
                       >
+                        <option value="">{t('inventory.select_category')}</option>
                         {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
                       </select>
                     </div>
@@ -279,18 +243,19 @@ export default function ItemModal({
                         value={formData.image_url}
                         onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
                         className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                        placeholder="https://images.unsplash.com/..."
+                        placeholder={t('inventory.image_placeholder')}
                       />
                     </div>
 
                     <div>
                       <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.description')}</label>
                       <textarea
-                        rows={3}
+                        rows={6}
+                        required
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                         className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none"
-                        placeholder="Public description for customers..."
+                        placeholder={t('inventory.description_placeholder')}
                       />
                     </div>
                   </div>
@@ -349,9 +314,9 @@ export default function ItemModal({
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">{t('inventory.price')} ($)</label>
+                          <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">{t('inventory.price')} ({symbol})</label>
                           <div className="relative">
-                            <DollarSign className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-xs">{symbol}</span>
                             <input
                               type="number"
                               step="0.01"
@@ -448,77 +413,6 @@ export default function ItemModal({
               </div>
             )}
 
-            {activeTab === 'ai' && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 flex gap-3">
-                  <Sparkles className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
-                  <p className="text-xs text-indigo-900 leading-relaxed">
-                    {t('inventory.ai_training_desc')}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.ai_desc')}</label>
-                      <textarea
-                        rows={4}
-                        value={formData.ai_custom_description}
-                        onChange={(e) => setFormData({ ...formData, ai_custom_description: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none"
-                        placeholder="Detailed internal notes for the AI to use when describing this item..."
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.specifications')}</label>
-                      <textarea
-                        rows={4}
-                        value={formData.specifications}
-                        onChange={(e) => setFormData({ ...formData, specifications: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none font-mono text-xs"
-                        placeholder="e.g. Weight: 200g, Material: Aluminum, Battery: 20h"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.keywords')}</label>
-                      <input
-                        type="text"
-                        value={formData.ai_keywords}
-                        onChange={(e) => setFormData({ ...formData, ai_keywords: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                        placeholder="premium, durable, eco-friendly"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.target_audience')}</label>
-                      <input
-                        type="text"
-                        value={formData.target_audience}
-                        onChange={(e) => setFormData({ ...formData, target_audience: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                        placeholder="e.g. Professionals, Students, Outdoor Enthusiasts"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.usage')}</label>
-                      <textarea
-                        rows={3}
-                        value={formData.usage_instructions}
-                        onChange={(e) => setFormData({ ...formData, usage_instructions: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none"
-                        placeholder="How should the customer use this item?"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {activeTab === 'logistics' && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -563,10 +457,10 @@ export default function ItemModal({
                       <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.special_instructions')}</label>
                       <textarea
                         rows={3}
-                        value={formData.ai_metadata}
-                        onChange={(e) => setFormData({ ...formData, ai_metadata: e.target.value })}
+                        value={formData.internal_notes}
+                        onChange={(e) => setFormData({ ...formData, internal_notes: e.target.value })}
                         className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none"
-                        placeholder="Internal instructions for the AI bot..."
+                        placeholder="Internal notes or special handling instructions..."
                       />
                     </div>
                   </div>

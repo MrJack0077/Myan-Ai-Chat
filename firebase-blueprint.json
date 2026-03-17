@@ -1,0 +1,89 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Application user profile",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["ADMIN", "VENDOR"] },
+        "shopId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role", "createdAt"]
+    },
+    "Shop": {
+      "title": "Shop",
+      "description": "Vendor shop configuration",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "suspended", "provisioning", "inactive"] },
+        "chatwootAccountId": { "type": "string" },
+        "chatwootToken": { "type": "string" },
+        "databaseName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "agentId": { "type": "string" },
+        "aiConfig": { "type": "object" },
+        "vendorCredentials": { "type": "object" }
+      },
+      "required": ["name", "slug", "status", "databaseName", "createdAt"]
+    },
+    "VendorItem": {
+      "title": "VendorItem",
+      "description": "Product or service item in a shop",
+      "type": "object",
+      "properties": {
+        "item_type": { "type": "string", "enum": ["product", "service"] },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "stock_type": { "type": "string", "enum": ["count", "status"] },
+        "stock_quantity": { "type": "number" },
+        "is_available": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["active", "inactive", "draft"] },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["item_type", "name", "price", "category", "status", "created_at"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order",
+      "type": "object",
+      "properties": {
+        "shopId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "shippingAddress": { "type": "string" },
+        "items": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "processing", "shipped", "delivered", "cancelled"] },
+        "paymentStatus": { "type": "string", "enum": ["pending", "verified", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["shopId", "customerName", "customerPhone", "items", "totalAmount", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/shops/{shopId}": {
+      "schema": "Shop",
+      "description": "Shop configurations"
+    },
+    "/shops/{shopId}/items/{itemId}": {
+      "schema": "VendorItem",
+      "description": "Shop inventory items"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer orders"
+    }
+  }
+}

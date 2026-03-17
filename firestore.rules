@@ -1,0 +1,181 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (Firebase Auth UID)
+    // Fields:
+    //   - email: string (required, email format)
+    //   - role: string (required, 'ADMIN' or 'VENDOR')
+    //   - shopId: string (optional)
+    //   - createdAt: string (required, date-time)
+    //
+    // Collection: shops
+    // Document ID: shopId
+    // Fields:
+    //   - name: string (required)
+    //   - slug: string (required)
+    //   - status: string (required, 'active', 'suspended', 'provisioning', 'inactive')
+    //   - chatwootAccountId: string (optional)
+    //   - chatwootToken: string (optional)
+    //   - databaseName: string (required)
+    //   - createdAt: string (required, date-time)
+    //   - agentId: string (optional)
+    //   - aiConfig: map (optional)
+    //   - vendorCredentials: map (optional)
+    //
+    // Collection: shops/{shopId}/items
+    // Document ID: itemId
+    // Fields:
+    //   - item_type: string (required, 'product' or 'service')
+    //   - name: string (required)
+    //   - price: number (required)
+    //   - description: string (optional)
+    //   - category: string (required)
+    //   - stock_type: string (optional, 'count' or 'status')
+    //   - stock_quantity: number (optional)
+    //   - is_available: bool (optional)
+    //   - status: string (required, 'active', 'inactive', 'draft')
+    //   - created_at: string (required, date-time)
+    //   - updated_at: string (optional, date-time)
+    //
+    // Collection: orders
+    // Document ID: orderId
+    // Fields:
+    //   - shopId: string (required)
+    //   - customerName: string (required)
+    //   - customerPhone: string (required)
+    //   - shippingAddress: string (required)
+    //   - items: list (required)
+    //   - totalAmount: number (required)
+    //   - status: string (required, 'pending', 'processing', 'shipped', 'delivered', 'cancelled')
+    //   - paymentStatus: string (optional, 'pending', 'verified', 'rejected')
+    //   - createdAt: string (required, date-time)
+    //   - updatedAt: string (required, date-time)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN' ||
+          (request.auth.token.email == "admin@gmail.com") ||
+          (request.auth.token.email == "luckydvservice@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isVendorForShop(shopId) {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.shopId == shopId;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // User Profiles
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.email is string && isValidEmail(data.email) &&
+               data.role in ['ADMIN', 'VENDOR'] &&
+               isValidDateString(data.createdAt) &&
+               (!('shopId' in data) || data.shopId is string);
+      }
+
+      allow read: if isOwner(userId) || isAdmin();
+      
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    (isOwner(userId) && request.resource.data.role == 'VENDOR' || isAdmin());
+      
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    (isOwner(userId) && request.resource.data.role == resource.data.role || isAdmin());
+    }
+
+    // Shops
+    match /shops/{shopId} {
+      function isValidShop(data) {
+        return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+               data.slug is string && data.slug.size() > 0 && data.slug.size() < 50 &&
+               data.status in ['active', 'suspended', 'provisioning', 'inactive'] &&
+               data.databaseName is string &&
+               isValidDateString(data.createdAt);
+      }
+
+      allow read: if isAuthenticated(); // Vendors need to see shop info, but maybe only their own? 
+                                       // Actually, public might need to see shop info for tracking.
+      
+      allow create: if isAdmin();
+      
+      allow update: if isAdmin() || (isVendorForShop(shopId) && isValidShop(request.resource.data));
+
+      // Shop Items (Subcollection)
+      match /items/{itemId} {
+        function isValidItem(data) {
+          return data.item_type in ['product', 'service'] &&
+                 data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+                 data.price is number && data.price >= 0 &&
+                 data.category is string &&
+                 data.status in ['active', 'inactive', 'draft'] &&
+                 isValidDateString(data.created_at);
+        }
+
+        allow read: if true; // Public can see items
+        
+        allow write: if isAdmin() || isVendorForShop(shopId) && isValidItem(request.resource.data);
+      }
+    }
+
+    // Orders
+    match /orders/{orderId} {
+      function isValidOrder(data) {
+        return data.shopId is string &&
+               data.customerName is string && data.customerName.size() > 0 &&
+               data.customerPhone is string &&
+               data.items is list &&
+               data.totalAmount is number &&
+               data.status in ['pending', 'processing', 'shipped', 'delivered', 'cancelled'] &&
+               isValidDateString(data.createdAt) &&
+               isValidDateString(data.updatedAt);
+      }
+
+      allow read: if isAuthenticated() && (isAdmin() || isVendorForShop(resource.data.shopId)) ||
+                   // Allow public tracking if they have the order ID
+                   (request.auth == null && resource != null); 
+      
+      allow create: if true; // Public can create orders (checkout)
+      
+      allow update: if isAuthenticated() && (isAdmin() || isVendorForShop(resource.data.shopId)) && isValidOrder(request.resource.data);
+      
+      allow delete: if isAdmin();
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

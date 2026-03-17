@@ -173,7 +173,7 @@ export default function ShopsPage() {
     setEditingShopId(shop.id);
     setNewShop({ 
       name: shop.name, 
-      slug: shop.slug, 
+      slug: shop.slug || '', 
       chatwootAccountId: shop.chatwootAccountId || '',
       chatwootToken: shop.chatwootToken || '',
       email: '',
@@ -191,9 +191,9 @@ export default function ShopsPage() {
         const shopData: Partial<Shop> = {
           name: newShop.name,
           slug: newShop.slug,
-          chatwootAccountId: newShop.chatwootAccountId || null,
-          chatwootToken: newShop.chatwootToken || null,
-          agentId: newShop.agentId || null,
+          chatwootAccountId: newShop.chatwootAccountId || undefined,
+          chatwootToken: newShop.chatwootToken || undefined,
+          agentId: newShop.agentId || undefined,
           databaseName: `db_${newShop.slug}`,
           vendorCredentials: {
             email: newShop.email,
@@ -213,9 +213,9 @@ export default function ShopsPage() {
           id: editingShopId!, 
           name: newShop.name, 
           slug: newShop.slug, 
-          chatwootAccountId: newShop.chatwootAccountId || null,
-          chatwootToken: newShop.chatwootToken || null,
-          agentId: newShop.agentId || null
+          chatwootAccountId: newShop.chatwootAccountId || undefined,
+          chatwootToken: newShop.chatwootToken || undefined,
+          agentId: newShop.agentId || undefined
         });
         showToast('Shop configuration updated', 'success');
       }
@@ -312,7 +312,7 @@ export default function ShopsPage() {
           <button 
             onClick={() => {
               setModalMode('create');
-              setNewShop({ name: '', slug: '', chatwootAccountId: '', email: '', password: '', agentId: '' });
+              setNewShop({ name: '', slug: '', chatwootAccountId: '', chatwootToken: '', email: '', password: '', agentId: '' });
               setIsModalOpen(true);
             }}
             className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-all shadow-sm active:scale-95"
@@ -529,7 +529,7 @@ export default function ShopsPage() {
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigator.clipboard.writeText(shop.databaseName);
+                              navigator.clipboard.writeText(shop.databaseName || '');
                               showToast('Database name copied to clipboard', 'info');
                             }}
                             className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600"
@@ -724,7 +724,7 @@ export default function ShopsPage() {
                           </code>
                           <button 
                             onClick={() => {
-                              navigator.clipboard.writeText(selectedShop.databaseName);
+                              navigator.clipboard.writeText(selectedShop.databaseName || '');
                               showToast('Database name copied to clipboard', 'info');
                             }}
                             className="p-1.5 hover:bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-indigo-600 transition-all"
@@ -829,7 +829,7 @@ export default function ShopsPage() {
                       {selectedShop.status === 'active' ? t('shops.suspended') : t('common.active')}
                     </button>
                     <button 
-                      onClick={() => handleDeleteShop(selectedShop.id)}
+                      onClick={() => handleDeleteShop(selectedShop)}
                       className="w-full px-4 py-2.5 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
                     >
                       <Trash2 className="w-4 h-4" />

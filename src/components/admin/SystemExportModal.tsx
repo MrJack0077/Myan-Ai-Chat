@@ -26,7 +26,6 @@ export default function SystemExportModal({ isOpen, onClose, shops }: SystemExpo
       database: shop.databaseName,
       createdAt: shop.createdAt,
       chatwootId: shop.chatwootAccountId,
-      aiConfig: shop.aiConfig,
       vendor: {
         email: shop.vendorCredentials?.email
       }

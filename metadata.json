@@ -1,5 +1,9 @@
 {
-  "name": "Myan Ai Chat Bot",
-  "description": "Professional vendor dashboard for managing products and services with isolated database storage.",
-  "requestFramePermissions": []
+  "name": "Vendor Management System",
+  "description": "A comprehensive dashboard for vendors to manage their shops, inventory, and orders.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
 }

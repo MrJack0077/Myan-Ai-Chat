@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate, Link, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
+import { useNotifications } from '../contexts/NotificationContext';
 import { 
   LayoutDashboard, 
   Store, 
@@ -17,7 +18,6 @@ import {
   Layers,
   BarChart2,
   MessageSquare,
-  Bot,
   Languages,
   Database
 } from 'lucide-react';
@@ -25,11 +25,13 @@ import {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { t, i18n } = useTranslation();
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
   const { shopId: urlShopId } = useParams();
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = React.useState(false);
 
   const effectiveShopId = (user?.role === 'ADMIN' && urlShopId) ? urlShopId : user?.shopId;
   const isVendorPath = location.pathname.startsWith('/vendor');
@@ -55,7 +57,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: t('nav.orders'), path: effectiveShopId ? `/vendor/${effectiveShopId}/orders` : '/vendor/orders', icon: ShoppingBag },
     { name: t('nav.inventory'), path: effectiveShopId ? `/vendor/${effectiveShopId}/inventory` : '/vendor/inventory', icon: Package },
     { name: t('nav.categories'), path: effectiveShopId ? `/vendor/${effectiveShopId}/categories` : '/vendor/categories', icon: Layers },
-    { name: t('nav.ai_training'), path: effectiveShopId ? `/vendor/${effectiveShopId}/ai-training` : '/vendor/ai-training', icon: Bot },
     { name: t('nav.shop_settings'), path: effectiveShopId ? `/vendor/${effectiveShopId}/settings` : '/vendor/settings', icon: Settings },
   ];
 
@@ -97,7 +98,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
           {links.map((link) => {
             const Icon = link.icon;
-            const isActive = link.path === '/vendor' || link.path === '/admin' 
+            const isBaseLink = link.path === '/vendor' || link.path === '/admin' || (effectiveShopId && link.path === `/vendor/${effectiveShopId}`);
+            const isActive = isBaseLink 
               ? location.pathname === link.path 
               : location.pathname.startsWith(link.path);
             
@@ -151,7 +153,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
           {links.map((link) => {
             const Icon = link.icon;
-            const isActive = link.path === '/vendor' || link.path === '/admin' 
+            const isBaseLink = link.path === '/vendor' || link.path === '/admin' || (effectiveShopId && link.path === `/vendor/${effectiveShopId}`);
+            const isActive = isBaseLink 
               ? location.pathname === link.path 
               : location.pathname.startsWith(link.path);
             
@@ -204,17 +207,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <h1 className="text-sm md:text-lg font-semibold text-zinc-900 truncate max-w-[120px] md:max-w-none">
                 {user?.role === 'ADMIN' ? t('common.admin_portal') : `${t('common.vendor')}: ${user?.shop?.name || 'My Shop'}`}
               </h1>
-              <button
-                onClick={() => {
-                  const newRole = user?.role === 'ADMIN' ? 'VENDOR' : 'ADMIN';
-                  const newUser = { ...user!, role: newRole };
-                  localStorage.setItem('user', JSON.stringify(newUser));
-                  window.location.href = newRole === 'ADMIN' ? '/admin' : '/vendor';
-                }}
-                className="px-2 py-0.5 md:px-3 md:py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-600 rounded-full text-[8px] md:text-[10px] font-bold uppercase tracking-wider transition-all whitespace-nowrap"
-              >
-                {t('common.switch_to')} {user?.role === 'ADMIN' ? t('common.vendor') : t('common.admin_portal')}
-              </button>
             </div>
           </div>
 
@@ -235,10 +227,70 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 className="pl-9 pr-4 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-48 xl:w-64"
               />
             </div>
-            <button className="p-2 hover:bg-zinc-100 rounded-lg relative">
-              <Bell className="w-5 h-5 text-zinc-500" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-            </button>
+            <div className="relative">
+              <button 
+                onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                className="p-2 hover:bg-zinc-100 rounded-lg relative"
+              >
+                <Bell className="w-5 h-5 text-zinc-500" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-2 right-2 w-4 h-4 bg-red-500 text-white text-[8px] font-bold flex items-center justify-center rounded-full border-2 border-white">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {isNotificationsOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setIsNotificationsOpen(false)} />
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-zinc-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="p-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
+                      <h3 className="font-bold text-zinc-900">{t('common.notifications')}</h3>
+                      <button 
+                        onClick={() => {
+                          markAllAsRead();
+                          setIsNotificationsOpen(false);
+                        }}
+                        className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                      >
+                        {t('common.mark_all_read')}
+                      </button>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                      {notifications.length === 0 ? (
+                        <div className="p-8 text-center">
+                          <Bell className="w-8 h-8 text-zinc-300 mx-auto mb-2" />
+                          <p className="text-sm text-zinc-500">{t('common.no_notifications')}</p>
+                        </div>
+                      ) : (
+                        notifications.map(notification => (
+                          <div 
+                            key={notification.id}
+                            className={`p-4 border-b border-zinc-50 hover:bg-zinc-50 transition-all cursor-pointer ${!notification.read ? 'bg-indigo-50/30' : ''}`}
+                            onClick={() => {
+                              markAsRead(notification.id);
+                              if (notification.link) navigate(notification.link);
+                              setIsNotificationsOpen(false);
+                            }}
+                          >
+                            <div className="flex gap-3">
+                              <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${!notification.read ? 'bg-indigo-600' : 'bg-transparent'}`} />
+                              <div>
+                                <p className="text-sm font-bold text-zinc-900">{notification.title}</p>
+                                <p className="text-xs text-zinc-500 mt-0.5">{notification.message}</p>
+                                <p className="text-[10px] text-zinc-400 mt-1">
+                                  {new Date(notification.timestamp).toLocaleTimeString()}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
             <div className="flex items-center gap-2 md:gap-3 pl-2 md:pl-4 border-l border-zinc-200">
               <div className="text-right hidden lg:block">
                 <p className="text-sm font-semibold text-zinc-900">{user?.email}</p>

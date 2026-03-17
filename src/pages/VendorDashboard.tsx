@@ -13,7 +13,10 @@ import {
   ShieldCheck,
   Database,
   MessageSquare,
-  Settings
+  Settings,
+  FileJson,
+  RefreshCw,
+  Sparkles
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { 
@@ -27,13 +30,16 @@ import {
   saveItem, 
   deleteItem,
   saveFAQ,
-  saveShop
+  saveShop,
+  bulkSaveItems,
+  searchInventoryRAG
 } from '../services/firebaseService';
 import { VendorItem, Category, FAQ, Shop, Order } from '../types';
 import VendorStats from '../components/vendor/VendorStats';
 import InventoryGrid from '../components/vendor/InventoryGrid';
 import CategoryManager from '../components/vendor/CategoryManager';
 import ItemModal from '../components/vendor/ItemModal';
+import ImportModal from '../components/vendor/ImportModal';
 import AIContextModal from '../components/vendor/AIContextModal';
 import FAQManager from '../components/vendor/FAQManager';
 import AITraining from '../components/vendor/AITraining';
@@ -48,6 +54,7 @@ interface Analytics {
   totalItems: number;
   newOrdersCount: number;
   pendingDeliveryCount: number;
+  usedTokens: number;
 }
 
 export default function VendorDashboard() {
@@ -69,11 +76,16 @@ export default function VendorDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isTypeSelectionOpen, setIsTypeSelectionOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<VendorItem | null>(null);
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterStock, setFilterStock] = useState<'all' | 'low' | 'out'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSemanticSearch, setIsSemanticSearch] = useState(false);
+  const [semanticResults, setSemanticResults] = useState<VendorItem[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -87,7 +99,7 @@ export default function VendorDashboard() {
     subcategory: '',
     ai_keywords: '',
     ai_metadata: '',
-    stock_type: 'count' as 'count' | 'status',
+    stock_type: 'count' as 'count' | 'status' | 'count',
     stock_quantity: '',
     is_available: true,
     duration: '',
@@ -169,7 +181,8 @@ export default function VendorDashboard() {
         outOfStockCount: itemsData.filter(i => i.stock_quantity === 0).length,
         mostPopularCategory: categoriesData[0]?.name || 'General',
         newOrdersCount: ordersData.filter(o => o.status === 'pending').length,
-        pendingDeliveryCount: ordersData.filter(o => ['processing', 'shipped'].includes(o.status)).length
+        pendingDeliveryCount: ordersData.filter(o => ['processing', 'shipped'].includes(o.status)).length,
+        usedTokens: shopData?.usedTokens || 0
       });
     } catch (error) {
       console.error('Failed to fetch data:', error);
@@ -203,7 +216,7 @@ export default function VendorDashboard() {
   const handleEdit = (item: VendorItem) => {
     setEditingItem(item);
     setFormData({
-      item_type: item.item_type,
+      item_type: item.item_type || 'product',
       name: item.name,
       price: item.price.toString(),
       description: item.description || '',
@@ -211,7 +224,7 @@ export default function VendorDashboard() {
       subcategory: item.subcategory || '',
       ai_keywords: item.ai_keywords || '',
       ai_metadata: item.ai_metadata || '',
-      stock_type: item.stock_type || 'count',
+      stock_type: (item.stock_type as any) || 'count',
       stock_quantity: item.stock_quantity?.toString() || '',
       is_available: item.is_available !== undefined ? item.is_available : true,
       duration: item.duration || '',
@@ -232,9 +245,13 @@ export default function VendorDashboard() {
   };
 
   const handleAddNew = () => {
+    setIsTypeSelectionOpen(true);
+  };
+
+  const handleSelectType = (type: 'product' | 'service') => {
     setEditingItem(null);
     setFormData({ 
-      item_type: 'product', 
+      item_type: type, 
       name: '', 
       price: '', 
       description: '', 
@@ -259,6 +276,7 @@ export default function VendorDashboard() {
       ai_custom_description: '',
       sub_items: []
     });
+    setIsTypeSelectionOpen(false);
     setIsModalOpen(true);
   };
 
@@ -306,18 +324,63 @@ export default function VendorDashboard() {
     }
   };
 
-  const filteredItems = items.filter(item => {
+  const handleImportJSON = async (itemsToImport: Partial<VendorItem>[]) => {
+    setIsSaving(true);
+    try {
+      await bulkSaveItems(effectiveShopId || '', itemsToImport);
+      showToast(`Successfully imported ${itemsToImport.length} items`, 'success');
+      fetchData();
+    } catch (error) {
+      console.error('Import failed:', error);
+      showToast('Failed to import items', 'error');
+      throw error;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    
+    if (isSemanticSearch && query.length > 2) {
+      setIsSearching(true);
+      try {
+        const results = await searchInventoryRAG(effectiveShopId || '', query, 10);
+        setSemanticResults(results);
+      } catch (error) {
+        console.error('Semantic search failed:', error);
+      } finally {
+        setIsSearching(false);
+      }
+    } else {
+      setSemanticResults(null);
+    }
+  };
+
+  const filteredItems = semanticResults || items.filter(item => {
     const matchesCategory = filterCategory === 'All' || item.category === filterCategory;
     const matchesSearch = (item.name?.toLowerCase() || '').includes(searchQuery.toLowerCase());
     const matchesStock = filterStock === 'all' 
       ? true 
       : filterStock === 'low' 
-        ? (item.item_type === 'product' && item.stock_type === 'count' && item.stock_quantity > 0 && item.stock_quantity <= 5)
-        : (item.item_type === 'product' && ((item.stock_type === 'count' && item.stock_quantity === 0) || (item.stock_type === 'status' && !item.is_available)));
+        ? (item.item_type === 'product' && item.stock_type === 'count' && (item.stock_quantity || 0) > 0 && (item.stock_quantity || 0) <= 5)
+        : (item.item_type === 'product' && ((item.stock_type === 'count' && (item.stock_quantity || 0) === 0) || (item.stock_type === 'status' && !item.is_available)));
     return matchesCategory && matchesSearch && matchesStock;
   });
 
-  const lowStockItems = items.filter(item => item.item_type === 'product' && item.stock_quantity <= 5);
+  const lowStockItems = items.filter(item => item.item_type === 'product' && (item.stock_quantity || 0) <= 5);
+
+  const getCurrencySymbol = (code: string) => {
+    switch (code) {
+      case 'MMK': return 'Ks';
+      case 'THB': return '฿';
+      case 'USD': return '$';
+      default: return '$';
+    }
+  };
+
+  const symbol = getCurrencySymbol(currentShop?.currency || 'USD');
 
   const generateAIContext = () => {
     let context = `AI Agent Configuration & Knowledge Base\n`;
@@ -349,7 +412,7 @@ export default function VendorDashboard() {
     items.forEach(item => {
       context += `- ${item.name} (${item.item_type})\n`;
       context += `  Category: ${item.category}\n`;
-      context += `  Price: $${Number(item.price).toFixed(2)}\n`;
+      context += `  Price: ${symbol}${Number(item.price).toFixed(2)}\n`;
       if (item.brand) context += `  Brand: ${item.brand}\n`;
       if (item.ai_keywords) context += `  Keywords: ${item.ai_keywords}\n`;
       if (item.ai_metadata) context += `  Special Instructions: ${item.ai_metadata}\n`;
@@ -364,7 +427,7 @@ export default function VendorDashboard() {
       if (item.sub_items && item.sub_items.length > 0) {
         context += `  Available Variations:\n`;
         item.sub_items.forEach(sub => {
-          context += `    - ${sub.name}: $${Number(sub.price).toFixed(2)}${sub.stock_quantity !== undefined ? ` (${sub.stock_quantity} in stock)` : ''}\n`;
+          context += `    - ${sub.name}: ${symbol}${Number(sub.price).toFixed(2)}${sub.stock_quantity !== undefined ? ` (${sub.stock_quantity} in stock)` : ''}\n`;
         });
       }
       context += `\n`;
@@ -400,6 +463,30 @@ export default function VendorDashboard() {
     };
     return JSON.stringify(exportData, null, 2);
   };
+
+  if (user?.role === 'ADMIN' && !effectiveShopId) {
+    return (
+      <div className="flex items-center justify-center h-full bg-zinc-50 p-6">
+        <div className="bg-white p-12 rounded-3xl border border-zinc-200 shadow-sm text-center max-w-md space-y-6">
+          <div className="w-20 h-20 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto">
+            <AlertCircle className="w-10 h-10" />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-zinc-900">{t('dashboard.no_shop_selected')}</h3>
+            <p className="text-zinc-500 mt-2">
+              {t('dashboard.no_shop_selected_desc')}
+            </p>
+          </div>
+          <button 
+            onClick={() => navigate('/admin/shops')}
+            className="w-full py-3 bg-zinc-900 text-white rounded-xl font-bold hover:bg-zinc-800 transition-all"
+          >
+            {t('dashboard.go_to_management')}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-zinc-50">
@@ -462,7 +549,7 @@ export default function VendorDashboard() {
                           <p className="text-[10px] text-zinc-500 uppercase tracking-wider">{item.category}</p>
                         </div>
                       </div>
-                      <p className="text-sm font-bold text-zinc-900">${Number(item.price).toFixed(2)}</p>
+                      <p className="text-sm font-bold text-zinc-900">{symbol}{Number(item.price).toFixed(2)}</p>
                     </div>
                   ))}
                 </div>
@@ -482,6 +569,13 @@ export default function VendorDashboard() {
         {activeTab === 'inventory' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4">
+              <button 
+                onClick={() => setIsImportModalOpen(true)}
+                className="bg-white border border-zinc-200 text-zinc-700 px-5 py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-zinc-50 transition-all"
+              >
+                <FileJson className="w-5 h-5" />
+                Import JSON
+              </button>
               <button 
                 onClick={openBulkUpdate}
                 className="bg-white border border-zinc-200 text-zinc-700 px-5 py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-zinc-50 transition-all"
@@ -503,21 +597,42 @@ export default function VendorDashboard() {
                 <Search className="w-5 h-5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input 
                   type="text" 
-                  placeholder={t('inventory.search_placeholder')} 
+                  placeholder={isSemanticSearch ? "Describe what you're looking for..." : t('inventory.search_placeholder')} 
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={handleSearch}
                   className="w-full pl-10 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                 />
+                {isSearching && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <RefreshCw className="w-4 h-4 text-indigo-600 animate-spin" />
+                  </div>
+                )}
               </div>
               <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setIsSemanticSearch(!isSemanticSearch);
+                    setSemanticResults(null);
+                    setSearchQuery('');
+                  }}
+                  className={cn(
+                    "px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all border",
+                    isSemanticSearch 
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100" 
+                      : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
+                  )}
+                >
+                  <Sparkles className={cn("w-4 h-4", isSemanticSearch ? "animate-pulse" : "")} />
+                  {isSemanticSearch ? "Semantic Search ON" : "AI Search"}
+                </button>
                 <div className="relative">
                   <select 
                     value={filterStock}
                     onChange={(e) => setFilterStock(e.target.value as any)}
                     className="appearance-none pl-4 pr-10 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-all outline-none focus:ring-2 focus:ring-indigo-500"
                   >
-                    <option value="all">All Stock</option>
-                    <option value="low">Low Stock</option>
+                    <option value="all">{t('inventory.all_stock')}</option>
+                    <option value="low">{t('inventory.low_stock_filter')}</option>
                     <option value="out">Out of Stock</option>
                   </select>
                   <ChevronDown className="w-4 h-4 text-zinc-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -538,12 +653,35 @@ export default function VendorDashboard() {
 
             {isLoading ? (
               <div className="py-20 text-center text-zinc-500">{t('inventory.loading')}</div>
+            ) : filteredItems.length === 0 ? (
+              <div className="bg-white p-20 rounded-3xl border border-zinc-200 text-center space-y-4">
+                <div className="w-20 h-20 bg-zinc-50 text-zinc-300 rounded-full flex items-center justify-center mx-auto">
+                  <Package className="w-10 h-10" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-zinc-900">{t('inventory.no_items_found')}</h3>
+                  <p className="text-zinc-500 max-w-xs mx-auto">
+                    {t('inventory.no_items_desc')}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setSearchQuery('');
+                    setFilterCategory('All');
+                    setFilterStock('all');
+                  }}
+                  className="text-indigo-600 font-bold hover:text-indigo-700 transition-all"
+                >
+                  {t('common.clear_filters')}
+                </button>
+              </div>
             ) : (
               <InventoryGrid 
                 items={filteredItems} 
                 onEdit={handleEdit} 
                 onDelete={handleDelete} 
                 onToggleStatus={toggleStatus} 
+                currency={currentShop?.currency}
               />
             )}
           </div>
@@ -612,7 +750,7 @@ export default function VendorDashboard() {
                   </div>
 
                   <div className="pt-6 border-t border-zinc-100">
-                    <h4 className="text-sm font-bold text-zinc-900 mb-4">Shop Status</h4>
+                    <h4 className="text-sm font-bold text-zinc-900 mb-4">{t('shop.status')}</h4>
                     <div className="flex items-center justify-between p-4 bg-zinc-50 rounded-2xl border border-zinc-200">
                       <div>
                         <p className="text-sm font-bold text-zinc-900">Current Status: <span className={currentShop?.status === 'active' ? 'text-emerald-600' : 'text-red-600'}>{currentShop?.status?.toUpperCase()}</span></p>
@@ -635,7 +773,7 @@ export default function VendorDashboard() {
                   </div>
 
                   <div className="pt-6 border-t border-zinc-100">
-                    <h4 className="text-sm font-bold text-zinc-900 mb-4">Chatwoot Integration</h4>
+                    <h4 className="text-sm font-bold text-zinc-900 mb-4">{t('shop.chatwoot_integration')}</h4>
                     <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-200">
                       <div className="flex items-start gap-3">
                         <AlertCircle className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
@@ -651,6 +789,171 @@ export default function VendorDashboard() {
                       </div>
                     </div>
                   </div>
+
+                  <div className="pt-6 border-t border-zinc-100">
+                    <h4 className="text-sm font-bold text-zinc-900 mb-4">{t('shop.settings')}</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('shop.currency')}</label>
+                        <select
+                          value={currentShop?.currency || 'USD'}
+                          onChange={async (e) => {
+                            const newCurrency = e.target.value as any;
+                            setCurrentShop(prev => prev ? { ...prev, currency: newCurrency } : null);
+                            await saveShop({ id: effectiveShopId, currency: newCurrency });
+                            showToast(t('shop.currency_updated'), 'success');
+                          }}
+                          className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all bg-white"
+                        >
+                          <option value="USD">US Dollar ($)</option>
+                          <option value="MMK">Myanmar Kyat (Ks)</option>
+                          <option value="THB">Thai Baht (฿)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-6 border-t border-zinc-100">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-sm font-bold text-zinc-900">{t('shop.payment_info')}</h4>
+                      <button 
+                        onClick={() => {
+                          const newPayment = { id: Math.random().toString(36).substr(2, 9), type: '', accountName: '', accountNumber: '' };
+                          const updated = [...(currentShop?.paymentInfo || []), newPayment];
+                          setCurrentShop(prev => prev ? { ...prev, paymentInfo: updated } : null);
+                        }}
+                        className="text-xs font-bold text-indigo-600 hover:underline"
+                      >
+                        + Add Payment Method
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {currentShop?.paymentInfo?.map((payment, idx) => (
+                        <div key={payment.id} className="p-4 bg-zinc-50 rounded-2xl border border-zinc-200 space-y-3 relative group">
+                          <button 
+                            onClick={() => {
+                              const updated = currentShop.paymentInfo?.filter(p => p.id !== payment.id);
+                              setCurrentShop(prev => prev ? { ...prev, paymentInfo: updated } : null);
+                            }}
+                            className="absolute top-2 right-2 p-1 text-zinc-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                          >
+                            <Plus className="w-4 h-4 rotate-45" />
+                          </button>
+                          <div className="grid grid-cols-2 gap-3">
+                            <input 
+                              placeholder={t('shop.payment_type_placeholder')}
+                              value={payment.type}
+                              onChange={(e) => {
+                                const updated = [...(currentShop.paymentInfo || [])];
+                                updated[idx].type = e.target.value;
+                                setCurrentShop(prev => prev ? { ...prev, paymentInfo: updated } : null);
+                              }}
+                              className="px-3 py-2 rounded-lg border border-zinc-200 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                            <input 
+                              placeholder={t('shop.account_name_placeholder')}
+                              value={payment.accountName}
+                              onChange={(e) => {
+                                const updated = [...(currentShop.paymentInfo || [])];
+                                updated[idx].accountName = e.target.value;
+                                setCurrentShop(prev => prev ? { ...prev, paymentInfo: updated } : null);
+                              }}
+                              className="px-3 py-2 rounded-lg border border-zinc-200 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <input 
+                            placeholder={t('shop.account_number_placeholder')}
+                            value={payment.accountNumber}
+                            onChange={(e) => {
+                              const updated = [...(currentShop.paymentInfo || [])];
+                              updated[idx].accountNumber = e.target.value;
+                              setCurrentShop(prev => prev ? { ...prev, paymentInfo: updated } : null);
+                            }}
+                            className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                      ))}
+                      {currentShop?.paymentInfo && currentShop.paymentInfo.length > 0 && (
+                        <button 
+                          onClick={async () => {
+                            await saveShop({ id: effectiveShopId, paymentInfo: currentShop.paymentInfo });
+                            showToast(t('shop.payment_info_saved'), 'success');
+                          }}
+                          className="w-full py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all"
+                        >
+                          {t('shop.save_payment_info')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-6 border-t border-zinc-100">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-sm font-bold text-zinc-900">{t('shop.delivery_info')}</h4>
+                      <button 
+                        onClick={() => {
+                          const newDeli = { id: Math.random().toString(36).substr(2, 9), region: '', amount: 0 };
+                          const updated = [...(currentShop?.deliveryInfo || []), newDeli];
+                          setCurrentShop(prev => prev ? { ...prev, deliveryInfo: updated } : null);
+                        }}
+                        className="text-xs font-bold text-indigo-600 hover:underline"
+                      >
+                        + Add Region
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {currentShop?.deliveryInfo?.map((deli, idx) => (
+                        <div key={deli.id} className="p-4 bg-zinc-50 rounded-2xl border border-zinc-200 space-y-3 relative group">
+                          <button 
+                            onClick={() => {
+                              const updated = currentShop.deliveryInfo?.filter(d => d.id !== deli.id);
+                              setCurrentShop(prev => prev ? { ...prev, deliveryInfo: updated } : null);
+                            }}
+                            className="absolute top-2 right-2 p-1 text-zinc-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                          >
+                            <Plus className="w-4 h-4 rotate-45" />
+                          </button>
+                          <div className="grid grid-cols-2 gap-3">
+                            <input 
+                              placeholder={t('shop.region_placeholder')}
+                              value={deli.region}
+                              onChange={(e) => {
+                                const updated = [...(currentShop.deliveryInfo || [])];
+                                updated[idx].region = e.target.value;
+                                setCurrentShop(prev => prev ? { ...prev, deliveryInfo: updated } : null);
+                              }}
+                              className="px-3 py-2 rounded-lg border border-zinc-200 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-400 font-bold">{currentShop?.currency || 'USD'}</span>
+                              <input 
+                                type="number"
+                                placeholder={t('shop.amount_placeholder')}
+                                value={deli.amount}
+                                onChange={(e) => {
+                                  const updated = [...(currentShop.deliveryInfo || [])];
+                                  updated[idx].amount = parseFloat(e.target.value) || 0;
+                                  setCurrentShop(prev => prev ? { ...prev, deliveryInfo: updated } : null);
+                                }}
+                                className="w-full pl-10 pr-3 py-2 rounded-lg border border-zinc-200 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      {currentShop?.deliveryInfo && currentShop.deliveryInfo.length > 0 && (
+                        <button 
+                          onClick={async () => {
+                            await saveShop({ id: effectiveShopId, deliveryInfo: currentShop.deliveryInfo });
+                            showToast(t('shop.delivery_info_saved'), 'success');
+                          }}
+                          className="w-full py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all"
+                        >
+                          {t('shop.save_delivery_info')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -661,14 +964,14 @@ export default function VendorDashboard() {
                       <Settings className="w-6 h-6" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-zinc-900">ဆိုင်စီမံသူ settings</h3>
-                      <p className="text-xs text-zinc-500">Shop Manager Configurations</p>
+                      <h3 className="text-lg font-bold text-zinc-900">{t('shop.manager_settings')}</h3>
+                      <p className="text-xs text-zinc-500">{t('shop.manager_configs')}</p>
                     </div>
                   </div>
 
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Manager Email</label>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('shop.manager_email')}</label>
                       <input
                         type="email"
                         disabled
@@ -681,7 +984,7 @@ export default function VendorDashboard() {
                       <div className="flex gap-3">
                         <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0" />
                         <div>
-                          <p className="text-xs font-bold text-indigo-900 mb-1">Role Permissions</p>
+                          <p className="text-xs font-bold text-indigo-900 mb-1">{t('shop.role_permissions')}</p>
                           <p className="text-[10px] text-indigo-700 leading-relaxed">
                             As a Shop Manager, you have full control over inventory, AI training, and customer interactions for this specific shop.
                           </p>
@@ -691,21 +994,21 @@ export default function VendorDashboard() {
 
                     {user?.role === 'ADMIN' && (
                       <div className="pt-4 space-y-4">
-                        <h4 className="text-sm font-bold text-zinc-900">Admin Controls</h4>
+                        <h4 className="text-sm font-bold text-zinc-900">{t('shop.admin_controls')}</h4>
                         <div className="grid grid-cols-1 gap-3">
                           <button 
                             onClick={() => navigate(`/admin/support?shopId=${effectiveShopId}`)}
                             className="w-full px-4 py-3 bg-white border border-zinc-200 text-zinc-700 font-bold rounded-xl hover:bg-zinc-50 transition-all flex items-center justify-center gap-2"
                           >
                             <MessageSquare className="w-4 h-4" />
-                            Open Support Chat
+                            {t('shop.open_support_chat')}
                           </button>
                           <button 
                             onClick={() => navigate(`/admin/databases`)}
                             className="w-full px-4 py-3 bg-white border border-zinc-200 text-zinc-700 font-bold rounded-xl hover:bg-zinc-50 transition-all flex items-center justify-center gap-2"
                           >
                             <Database className="w-4 h-4" />
-                            Manage Database
+                            {t('shop.manage_database')}
                           </button>
                         </div>
                       </div>
@@ -730,7 +1033,7 @@ export default function VendorDashboard() {
         )}
 
         {activeTab === 'orders' && (
-          <OrderManager shopId={effectiveShopId || ''} />
+          <OrderManager shopId={effectiveShopId || ''} currency={currentShop?.currency} />
         )}
 
         {['analytics', 'reviews'].includes(activeTab) && (
@@ -744,6 +1047,51 @@ export default function VendorDashboard() {
         )}
       </div>
 
+      {/* Modals */}
+      {isTypeSelectionOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-zinc-900/40 backdrop-blur-sm" onClick={() => setIsTypeSelectionOpen(false)}></div>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md relative z-10 p-8 animate-in fade-in zoom-in duration-200">
+            <div className="text-center mb-8">
+              <h3 className="text-2xl font-bold text-zinc-900 mb-2">{t('inventory.create_new_title')}</h3>
+              <p className="text-zinc-500">{t('inventory.create_new_desc')}</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4">
+              <button
+                onClick={() => handleSelectType('product')}
+                className="group p-6 bg-zinc-50 border border-zinc-200 rounded-2xl hover:border-indigo-500 hover:bg-indigo-50 transition-all text-left flex items-center gap-4"
+              >
+                <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                  <Package className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="font-bold text-zinc-900 group-hover:text-indigo-900">{t('common.product')}</p>
+                  <p className="text-xs text-zinc-500">{t('inventory.product_desc')}</p>
+                </div>
+              </button>
+              <button
+                onClick={() => handleSelectType('service')}
+                className="group p-6 bg-zinc-50 border border-zinc-200 rounded-2xl hover:border-indigo-500 hover:bg-indigo-50 transition-all text-left flex items-center gap-4"
+              >
+                <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                  <Clock className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="font-bold text-zinc-900 group-hover:text-indigo-900">{t('common.service')}</p>
+                  <p className="text-xs text-zinc-500">{t('inventory.service_desc')}</p>
+                </div>
+              </button>
+            </div>
+            <button
+              onClick={() => setIsTypeSelectionOpen(false)}
+              className="w-full mt-6 py-3 text-zinc-500 font-bold hover:text-zinc-900 transition-all"
+            >
+              {t('common.cancel')}
+            </button>
+          </div>
+        </div>
+      )}
+
       <ItemModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
@@ -753,6 +1101,7 @@ export default function VendorDashboard() {
         setFormData={setFormData} 
         onSubmit={handleSubmit} 
         isSaving={isSaving}
+        currency={currentShop?.currency}
       />
 
       <AIContextModal 
@@ -762,13 +1111,20 @@ export default function VendorDashboard() {
         jsonContext={generateFullJSONExport()}
       />
 
+      <ImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImport={handleImportJSON}
+        isImporting={isSaving}
+      />
+
       {/* Bulk Stock Modal */}
       {isBulkModalOpen && (
         <div className="fixed inset-0 bg-zinc-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
               <div>
-                <h3 className="text-xl font-bold text-zinc-900">Bulk Stock Update</h3>
+                <h3 className="text-xl font-bold text-zinc-900">{t('inventory.bulk_stock_update')}</h3>
                 <p className="text-sm text-zinc-500">Quickly update stock levels for all products</p>
               </div>
               <button onClick={() => setIsBulkModalOpen(false)} className="p-2 hover:bg-zinc-200 rounded-full transition-all">
