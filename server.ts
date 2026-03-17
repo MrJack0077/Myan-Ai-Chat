@@ -18,7 +18,15 @@ async function startServer() {
     }
   });
 
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
+
+  // Request logging middleware
+  app.use((req, res, next) => {
+    if (req.url.startsWith('/assets/')) {
+      console.log(`Asset request: ${req.url}`);
+    }
+    next();
+  });
 
   // Socket.io Logic
   io.on("connection", (socket) => {
@@ -57,7 +65,15 @@ async function startServer() {
     console.log("Starting in PRODUCTION mode...");
     const distPath = path.join(__dirname, "dist");
     console.log(`Serving static files from: ${distPath}`);
+    
+    // Explicitly serve assets folder first to ensure it's prioritized
+    app.use('/assets', express.static(path.join(distPath, 'assets'), {
+      immutable: true,
+      maxAge: '1y'
+    }));
+    
     app.use(express.static(distPath));
+    
     app.get("*all", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
