@@ -37,7 +37,7 @@ import InventoryGrid from '../components/vendor/InventoryGrid';
 import CategoryManager from '../components/vendor/CategoryManager';
 import ItemModal from '../components/vendor/ItemModal';
 import ImportModal from '../components/vendor/ImportModal';
-import AIContextModal from '../components/vendor/AIContextModal';
+import AiContextModal from '../components/vendor/AiContextModal';
 import FAQManager from '../components/vendor/FAQManager';
 import AITraining from '../components/vendor/AITraining';
 import OrderManager from '../components/vendor/OrderManager';
@@ -1140,7 +1140,7 @@ export default function VendorDashboard() {
         currency={currentShop?.currency}
       />
 
-      <AIContextModal 
+      <AiContextModal 
         isOpen={isAIModalOpen} 
         onClose={() => setIsAIModalOpen(false)} 
         context={generateAIContext()} 
