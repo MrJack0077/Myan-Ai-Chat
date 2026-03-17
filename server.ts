@@ -4,6 +4,8 @@ import { Server } from "socket.io";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
+import compression from "compression";
+import sirv from "sirv";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,6 +13,9 @@ const __dirname = path.dirname(__filename);
 async function startServer() {
   const app = express();
   const httpServer = createServer(app);
+  
+  app.use(compression());
+
   const io = new Server(httpServer, {
     cors: {
       origin: "*",
@@ -22,9 +27,13 @@ async function startServer() {
 
   // Request logging middleware
   app.use((req, res, next) => {
-    if (req.url.startsWith('/assets/')) {
-      console.log(`Asset request: ${req.url}`);
-    }
+    const start = Date.now();
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      if (req.url.startsWith('/assets/') || req.url === '/' || req.url.includes('index.html')) {
+        console.log(`${req.method} ${req.url} - ${res.statusCode} (${duration}ms)`);
+      }
+    });
     next();
   });
 
@@ -66,17 +75,17 @@ async function startServer() {
     const distPath = path.join(__dirname, "dist");
     console.log(`Serving static files from: ${distPath}`);
     
-    // Explicitly serve assets folder first to ensure it's prioritized
-    app.use('/assets', express.static(path.join(distPath, 'assets'), {
-      immutable: true,
-      maxAge: '1y'
+    // Use sirv for robust static serving with SPA support
+    app.use(sirv(distPath, {
+      dev: false,
+      single: true,
+      compress: true,
+      setHeaders: (res, pathname) => {
+        if (pathname.endsWith('.css')) {
+          res.setHeader('Content-Type', 'text/css; charset=utf-8');
+        }
+      }
     }));
-    
-    app.use(express.static(distPath));
-    
-    app.get("*all", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
   }
 
   httpServer.listen(PORT, "0.0.0.0", () => {
