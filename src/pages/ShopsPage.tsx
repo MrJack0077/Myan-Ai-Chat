@@ -29,7 +29,7 @@ import { format } from 'date-fns';
 import { getAllShops, saveShop, deleteShop, createVendorUser } from '../services/firebaseService';
 import { Shop, SortField, SortOrder } from '../types';
 import { useToast } from '../components/Toast';
-import { Key, Eye, EyeOff, Bot, Edit2 } from 'lucide-react';
+import { Key, Eye, EyeOff, Bot, Edit2, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import SystemExportModal from '../components/admin/SystemExportModal';
 
@@ -181,6 +181,31 @@ export default function ShopsPage() {
       agentId: shop.agentId || ''
     });
     setIsModalOpen(true);
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedShop) return;
+    
+    // Check file size (limit to 1MB)
+    if (file.size > 1024 * 1024) {
+      showToast('Image must be less than 1MB', 'error');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64String = reader.result as string;
+      try {
+        await saveShop({ id: selectedShop.id, logoUrl: base64String });
+        setSelectedShop({ ...selectedShop, logoUrl: base64String });
+        setShops(shops.map(s => s.id === selectedShop.id ? { ...s, logoUrl: base64String } : s));
+        showToast('Logo updated successfully', 'success');
+      } catch (error) {
+        showToast('Failed to update logo', 'error');
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSaveShop = async (e: React.FormEvent) => {
@@ -497,9 +522,18 @@ export default function ShopsPage() {
                       />
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-medium text-slate-900 group-hover:text-indigo-600 transition-colors">{shop.name}</span>
-                        <span className="text-xs text-slate-500">/{shop.slug}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center overflow-hidden border border-indigo-100 flex-shrink-0">
+                          {shop.logoUrl ? (
+                            <img src={shop.logoUrl} alt={shop.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <Store className="w-4 h-4 text-indigo-400" />
+                          )}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-medium text-slate-900 group-hover:text-indigo-600 transition-colors">{shop.name}</span>
+                          <span className="text-xs text-slate-500">/{shop.slug}</span>
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -668,8 +702,24 @@ export default function ShopsPage() {
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
-                    <Store className="w-6 h-6 text-indigo-600" />
+                  <div className="relative group">
+                    <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center overflow-hidden border border-indigo-200">
+                      {selectedShop.logoUrl ? (
+                        <img src={selectedShop.logoUrl} alt={selectedShop.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <Store className="w-6 h-6 text-indigo-600" />
+                      )}
+                    </div>
+                    <label className="absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center rounded-xl cursor-pointer transition-opacity">
+                      <Upload className="w-4 h-4 mb-0.5" />
+                      <span className="text-[8px] font-bold uppercase tracking-wider">Upload</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={handleLogoUpload}
+                      />
+                    </label>
                   </div>
                   <div>
                     <h2 className="text-lg font-bold text-slate-900 leading-tight">{selectedShop.name}</h2>

@@ -216,7 +216,15 @@ export const generateEmbedding = async (text: string): Promise<number[]> => {
     }
   });
   
+  if (!result.embeddings || result.embeddings.length === 0) {
+    throw new Error('Failed to generate embedding');
+  }
+  
   let embeddingArray = result.embeddings[0].values;
+  
+  if (!embeddingArray) {
+    throw new Error('Embedding values are undefined');
+  }
   
   // Ensure it doesn't exceed 768 dimensions as a safety measure
   if (embeddingArray.length > 768) {
@@ -467,7 +475,7 @@ export const updateOrderStatus = async (shopId: string, orderId: string, status:
     if (orderSnap.exists()) {
       const orderData = orderSnap.data() as Order;
       for (const item of orderData.items) {
-        if (typeof item !== 'string' && item.itemId && item.itemId !== 'bot-generated') {
+        if (item.itemId && item.itemId !== 'bot-generated') {
           const itemRef = doc(db, 'shops', shopId, 'items', item.itemId);
           const itemSnap = await getDoc(itemRef);
           if (itemSnap.exists()) {

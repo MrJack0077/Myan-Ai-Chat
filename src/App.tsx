@@ -2,12 +2,14 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './components/Toast';
+import { NotificationProvider } from './contexts/NotificationContext';
 import LoginPage from './pages/LoginPage';
 import AdminDashboard from './pages/AdminDashboard';
 import VendorDashboard from './pages/VendorDashboard';
 import ShopsPage from './pages/ShopsPage';
 import SupportPage from './pages/SupportPage';
 import OrderTracking from './pages/OrderTracking';
+import DashboardLayout from './components/DashboardLayout';
 import './i18n';
 
 function PrivateRoute({ children, role }: { children: React.ReactNode, role?: 'ADMIN' | 'VENDOR' }) {
@@ -29,7 +31,7 @@ function PrivateRoute({ children, role }: { children: React.ReactNode, role?: 'A
     return <Navigate to="/" />;
   }
 
-  return <>{children}</>;
+  return <DashboardLayout>{children}</DashboardLayout>;
 }
 
 function AppRoutes() {
@@ -47,19 +49,24 @@ function AppRoutes() {
 
       <Route path="/admin/*" element={
         <PrivateRoute role="ADMIN">
-          <AdminDashboard />
+          <Routes>
+            <Route path="/" element={<AdminDashboard />} />
+            <Route path="/shops" element={<ShopsPage />} />
+            <Route path="/support" element={<SupportPage />} />
+          </Routes>
         </PrivateRoute>
       } />
 
       <Route path="/vendor/*" element={
         <PrivateRoute role="VENDOR">
-          <VendorDashboard />
+          <Routes>
+            <Route path="/" element={<VendorDashboard />} />
+            <Route path="/:shopId/*" element={<VendorDashboard />} />
+          </Routes>
         </PrivateRoute>
       } />
 
-      <Route path="/shops" element={<ShopsPage />} />
-      <Route path="/support" element={<SupportPage />} />
-      <Route path="/track" element={<OrderTracking />} />
+      <Route path="/track/:shopId/:orderId" element={<OrderTracking />} />
       
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
@@ -71,9 +78,11 @@ function App() {
     <Router>
       <AuthProvider>
         <ToastProvider>
-          <div className="min-h-screen bg-zinc-50">
-            <AppRoutes />
-          </div>
+          <NotificationProvider>
+            <div className="min-h-screen bg-zinc-50">
+              <AppRoutes />
+            </div>
+          </NotificationProvider>
         </ToastProvider>
       </AuthProvider>
     </Router>

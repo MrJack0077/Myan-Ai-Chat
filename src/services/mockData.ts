@@ -31,7 +31,7 @@ export const mockShops: Shop[] = [
       fallbackMessage: "I'm not sure about that. Let me find someone who can help!"
     }
   },
-  { id: '2', name: 'Shop Two', slug: 'shop-two', status: 'suspended', chatwootAccountId: undefined, databaseName: 'db2', createdAt: '2025-02-01T00:00:00Z', size: 2048 },
+  { id: '2', name: 'Shop Two', slug: 'shop-two', status: 'suspended', chatwootAccountId: null, databaseName: 'db2', createdAt: '2025-02-01T00:00:00Z', size: 2048 },
 ];
 
 export const mockFAQs: FAQ[] = [
@@ -53,7 +53,6 @@ export const mockVendorItems: VendorItem[] = [
     duration: undefined, 
     status: 'active', 
     created_at: '2025-01-01T00:00:00Z',
-    updated_at: '2025-01-01T00:00:00Z',
     image_url: 'https://picsum.photos/seed/product1/400/300',
     ai_keywords: 'quality, daily, durable',
     selling_points: ['Eco-friendly material', '2-year warranty', 'Lightweight design'],
@@ -74,7 +73,6 @@ export const mockVendorItems: VendorItem[] = [
     duration: '1h', 
     status: 'inactive', 
     created_at: '2025-02-01T00:00:00Z',
-    updated_at: '2025-02-01T00:00:00Z',
     image_url: 'https://picsum.photos/seed/service1/400/300',
     ai_keywords: 'consultation, professional, expert',
     selling_points: ['Expert advice', 'Personalized plan', 'Follow-up included']

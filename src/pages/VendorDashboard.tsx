@@ -14,7 +14,8 @@ import {
   Database,
   MessageSquare,
   Settings,
-  FileJson
+  FileJson,
+  Upload
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { 
@@ -37,7 +38,7 @@ import InventoryGrid from '../components/vendor/InventoryGrid';
 import CategoryManager from '../components/vendor/CategoryManager';
 import ItemModal from '../components/vendor/ItemModal';
 import ImportModal from '../components/vendor/ImportModal';
-import AiContextModal from '../components/vendor/AiContextModal';
+import AIContextModal from '../components/vendor/AIContextModal';
 import FAQManager from '../components/vendor/FAQManager';
 import AITraining from '../components/vendor/AITraining';
 import OrderManager from '../components/vendor/OrderManager';
@@ -184,6 +185,31 @@ export default function VendorDashboard() {
       console.error('Failed to fetch data:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !effectiveShopId || !currentShop) return;
+
+    // Check file size (max 1MB)
+    if (file.size > 1024 * 1024) {
+      showToast('Image size must be less than 1MB', 'error');
+      return;
+    }
+
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64String = reader.result as string;
+        await saveShop({ id: effectiveShopId, logoUrl: base64String });
+        setCurrentShop(prev => prev ? { ...prev, logoUrl: base64String } : null);
+        showToast('Shop logo updated successfully', 'success');
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Failed to upload logo:', error);
+      showToast('Failed to upload logo', 'error');
     }
   };
 
@@ -740,8 +766,24 @@ export default function VendorDashboard() {
               <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm">
                 <div className="space-y-6">
                   <div className="flex items-center gap-6 pb-6 border-b border-zinc-100">
-                    <div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center">
-                      <Package className="w-10 h-10" />
+                    <div className="relative group">
+                      <div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center overflow-hidden">
+                        {currentShop?.logoUrl ? (
+                          <img src={currentShop.logoUrl} alt={currentShop.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <Package className="w-10 h-10" />
+                        )}
+                      </div>
+                      <label className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-3xl">
+                        <Upload className="w-6 h-6 mb-1" />
+                        <span className="text-[10px] font-medium">Upload</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={handleLogoUpload}
+                        />
+                      </label>
                     </div>
                     <div>
                       <h3 className="text-xl font-bold text-zinc-900">{currentShop?.name}</h3>
@@ -1140,7 +1182,7 @@ export default function VendorDashboard() {
         currency={currentShop?.currency}
       />
 
-      <AiContextModal 
+      <AIContextModal 
         isOpen={isAIModalOpen} 
         onClose={() => setIsAIModalOpen(false)} 
         context={generateAIContext()} 

@@ -77,7 +77,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   useEffect(() => {
     if (user?.shopId) {
       const unsubscribe = subscribeToBotUsers((botUsers) => {
-        const shopBotUsers = botUsers.filter(u => (u as any).shopId === user.shopId || u.id.startsWith(user.shopId));
+        const shopBotUsers = botUsers.filter(u => (u as any).shopId === user!.shopId || u.id.startsWith(user!.shopId!));
         
         if (isInitialLoad.current) {
           shopBotUsers.forEach(u => lastBotUserIds.current.add(u.id));

@@ -70,6 +70,7 @@ export interface Shop {
   databaseName: string;
   createdAt: string;
   size?: number;
+  logoUrl?: string;
   agentId?: string;
   aiConfig?: ShopAIConfig;
   usedTokens?: number;
@@ -158,19 +159,15 @@ export interface Order {
   customerEmail?: string;
   customerPhone: string;
   shippingAddress: string;
-  items: (OrderItem | string)[];
+  items: OrderItem[];
   totalAmount: number;
   status: OrderStatus;
   paymentStatus?: PaymentStatus;
   paymentScreenshotUrl?: string;
-  payment_slip_url?: string;
   createdAt: string;
   updatedAt: string;
   notes?: string;
   userId?: string;
   paymentMethod?: string;
   trackingNumber?: string;
-  deli_charge?: number;
-  total_price?: number;
-  customer_address?: string;
 }
