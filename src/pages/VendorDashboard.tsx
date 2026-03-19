@@ -58,13 +58,22 @@ interface Analytics {
 export default function VendorDashboard() {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const { shopId: urlShopId } = useParams();
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   
+  // Extract shopId from URL for ADMIN impersonation, ignoring known tabs
+  const pathParts = location.pathname.split('/').filter(Boolean);
+  let parsedShopId = undefined;
+  if (pathParts[0] === 'vendor' && pathParts.length > 1) {
+    const knownTabs = ['orders', 'inventory', 'categories', 'ai-training', 'settings', 'analytics', 'reviews'];
+    if (!knownTabs.includes(pathParts[1])) {
+      parsedShopId = pathParts[1];
+    }
+  }
+
   // Determine effective shopId: URL param takes precedence for ADMINs
-  const effectiveShopId = (user?.role === 'ADMIN' && urlShopId) ? urlShopId : user?.shopId;
+  const effectiveShopId = (user?.role === 'ADMIN' && parsedShopId) ? parsedShopId : user?.shopId;
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'categories' | 'settings' | 'analytics' | 'reviews' | 'ai-training' | 'orders'>('dashboard');
   const [items, setItems] = useState<VendorItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -471,9 +480,9 @@ export default function VendorDashboard() {
     const exportData = {
       shop: {
         id: effectiveShopId,
-        name: user?.role === 'ADMIN' ? 'Admin Managed Shop' : user?.shop?.name,
-        slug: user?.role === 'ADMIN' ? 'managed' : user?.shop?.slug,
-        aiConfig: user?.role === 'ADMIN' ? null : user?.shop?.aiConfig,
+        name: currentShop?.name || 'Shop',
+        slug: currentShop?.slug || 'shop',
+        aiConfig: currentShop?.aiConfig || null,
       },
       inventory: items.map(item => ({
         ...item,
@@ -796,24 +805,20 @@ export default function VendorDashboard() {
                       <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('dashboard.shop_name')}</label>
                       <input
                         type="text"
-                        disabled={user?.role !== 'ADMIN'}
                         value={currentShop?.name || ''}
                         onChange={async (e) => {
-                          if (user?.role === 'ADMIN' && effectiveShopId) {
+                          if (effectiveShopId) {
                             const newName = e.target.value;
                             setCurrentShop(prev => prev ? { ...prev, name: newName } : null);
                           }
                         }}
                         onBlur={async () => {
-                          if (user?.role === 'ADMIN' && effectiveShopId && currentShop) {
+                          if (effectiveShopId && currentShop) {
                             await saveShop({ id: effectiveShopId, name: currentShop.name });
                             showToast('Shop name updated', 'success');
                           }
                         }}
-                        className={cn(
-                          "w-full px-4 py-3 rounded-xl border border-zinc-200 transition-all",
-                          user?.role !== 'ADMIN' ? "bg-zinc-50 text-zinc-500 cursor-not-allowed" : "focus:ring-2 focus:ring-indigo-500 outline-none"
-                        )}
+                        className="w-full px-4 py-3 rounded-xl border border-zinc-200 transition-all focus:ring-2 focus:ring-indigo-500 outline-none"
                       />
                     </div>
                     <div>
@@ -1069,28 +1074,6 @@ export default function VendorDashboard() {
                         </div>
                       </div>
                     </div>
-
-                    {user?.role === 'ADMIN' && (
-                      <div className="pt-4 space-y-4">
-                        <h4 className="text-sm font-bold text-zinc-900">{t('shop.admin_controls')}</h4>
-                        <div className="grid grid-cols-1 gap-3">
-                          <button 
-                            onClick={() => navigate(`/admin/support?shopId=${effectiveShopId}`)}
-                            className="w-full px-4 py-3 bg-white border border-zinc-200 text-zinc-700 font-bold rounded-xl hover:bg-zinc-50 transition-all flex items-center justify-center gap-2"
-                          >
-                            <MessageSquare className="w-4 h-4" />
-                            {t('shop.open_support_chat')}
-                          </button>
-                          <button 
-                            onClick={() => navigate(`/admin/databases`)}
-                            className="w-full px-4 py-3 bg-white border border-zinc-200 text-zinc-700 font-bold rounded-xl hover:bg-zinc-50 transition-all flex items-center justify-center gap-2"
-                          >
-                            <Database className="w-4 h-4" />
-                            {t('shop.manage_database')}
-                          </button>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>

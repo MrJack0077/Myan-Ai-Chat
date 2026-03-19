@@ -12,7 +12,7 @@ import OrderTracking from './pages/OrderTracking';
 import DashboardLayout from './components/DashboardLayout';
 import './i18n';
 
-function PrivateRoute({ children, role }: { children: React.ReactNode, role?: 'ADMIN' | 'VENDOR' }) {
+function PrivateRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: ('ADMIN' | 'VENDOR')[] }) {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
@@ -27,7 +27,7 @@ function PrivateRoute({ children, role }: { children: React.ReactNode, role?: 'A
     return <Navigate to="/login" />;
   }
 
-  if (role && user.role !== role) {
+  if (allowedRoles && !allowedRoles.includes(user.role as any)) {
     return <Navigate to="/" />;
   }
 
@@ -48,7 +48,7 @@ function AppRoutes() {
       } />
 
       <Route path="/admin/*" element={
-        <PrivateRoute role="ADMIN">
+        <PrivateRoute allowedRoles={['ADMIN']}>
           <Routes>
             <Route path="/" element={<AdminDashboard />} />
             <Route path="/shops" element={<ShopsPage />} />
@@ -58,7 +58,7 @@ function AppRoutes() {
       } />
 
       <Route path="/vendor/*" element={
-        <PrivateRoute role="VENDOR">
+        <PrivateRoute allowedRoles={['ADMIN', 'VENDOR']}>
           <Routes>
             <Route path="/" element={<VendorDashboard />} />
             <Route path="/:shopId/*" element={<VendorDashboard />} />

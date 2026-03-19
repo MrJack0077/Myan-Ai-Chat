@@ -29,12 +29,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
-  const { shopId: urlShopId } = useParams();
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = React.useState(false);
 
-  const effectiveShopId = (user?.role === 'ADMIN' && urlShopId) ? urlShopId : user?.shopId;
+  // Extract shopId from URL for ADMIN impersonation
+  const pathParts = location.pathname.split('/').filter(Boolean);
+  let parsedShopId = undefined;
+  if (pathParts[0] === 'vendor' && pathParts.length > 1) {
+    const knownTabs = ['orders', 'inventory', 'categories', 'ai-training', 'settings', 'analytics', 'reviews'];
+    if (!knownTabs.includes(pathParts[1])) {
+      parsedShopId = pathParts[1];
+    }
+  }
+
+  const effectiveShopId = (user?.role === 'ADMIN' && parsedShopId) ? parsedShopId : user?.shopId;
   const isVendorPath = location.pathname.startsWith('/vendor');
 
   const toggleLanguage = () => {
@@ -69,7 +78,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Mobile Sidebar Overlay */}
       {isMobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-zinc-900/50 backdrop-blur-sm z-50"
+          className="fixed inset-0 bg-zinc-900/50 backdrop-blur-sm z-50 md:hidden"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
@@ -134,7 +143,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* Desktop Sidebar */}
-      <aside className={`bg-white border-r border-zinc-200 transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'} flex flex-col sticky top-0 h-screen shrink-0 z-20`}>
+      <aside className={`bg-white border-r border-zinc-200 transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'} hidden md:flex flex-col sticky top-0 h-screen shrink-0`}>
         <div className="p-6 flex items-center gap-3">
           <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shrink-0">
             <Store className="text-white w-5 h-5" />
@@ -142,7 +151,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {isSidebarOpen && <span className="font-bold text-xl text-zinc-900 truncate">{t('common.shop_manager')}</span>}
         </div>
 
-        <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-4 space-y-1">
           {user?.role === 'ADMIN' && isVendorPath && (
             <Link
               to="/admin/shops"
@@ -189,17 +198,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="h-16 bg-white border-b border-zinc-200 flex items-center justify-between px-4 md:px-6 sticky top-0 z-30 shadow-sm">
+        <header className="h-16 bg-white border-b border-zinc-200 flex items-center justify-between px-4 md:px-6 sticky top-0 z-10">
           <div className="flex items-center gap-2 md:gap-4">
             <button 
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 hover:bg-zinc-100 rounded-lg"
+              className="p-2 hover:bg-zinc-100 rounded-lg md:block hidden"
+            >
+              <Menu className="w-5 h-5 text-zinc-500" />
+            </button>
+            <button 
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="p-2 hover:bg-zinc-100 rounded-lg md:hidden block"
             >
               <Menu className="w-5 h-5 text-zinc-500" />
             </button>
             <div className="flex items-center gap-2 md:gap-3">
               <h1 className="text-sm md:text-lg font-semibold text-zinc-900 truncate max-w-[120px] md:max-w-none">
-                {user?.role === 'ADMIN' ? t('common.admin_portal') : `${t('common.vendor')}: ${user?.shop?.name || 'My Shop'}`}
+                {user?.role === 'ADMIN' 
+                  ? (isVendorPath ? t('common.vendor') : t('common.admin_portal')) 
+                  : `${t('common.vendor')}: ${user?.shop?.name || 'My Shop'}`}
               </h1>
             </div>
           </div>
