@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, X, Info, Settings, ShieldCheck, Layers, Trash2, DollarSign, Tag, CheckCircle2 } from 'lucide-react';
+import { Plus, X, Info, Settings, ShieldCheck, Layers, Trash2, DollarSign, Tag, CheckCircle2, Sparkles } from 'lucide-react';
 import { Category, VendorItem, SubItem } from '../../types';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
@@ -39,7 +39,7 @@ export default function ItemModal({
   };
 
   const symbol = getCurrencySymbol(currency);
-  const [activeTab, setActiveTab] = useState<'basic' | 'variations' | 'logistics'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'variations' | 'ai' | 'logistics'>('basic');
   
   if (!isOpen) return null;
 
@@ -111,6 +111,16 @@ export default function ItemModal({
             >
               <Layers className="w-4 h-4" />
               {t('inventory.variations')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('ai')}
+              className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                activeTab === 'ai' ? 'bg-white text-indigo-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              <Sparkles className="w-4 h-4" />
+              {t('inventory.ai_knowledge')}
             </button>
             <button
               type="button"
@@ -413,6 +423,80 @@ export default function ItemModal({
               </div>
             )}
 
+
+            {activeTab === 'ai' && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 flex gap-4">
+                  <div className="p-2 bg-indigo-100 rounded-xl h-fit">
+                    <Sparkles className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <p className="text-sm text-indigo-900 leading-relaxed">
+                    {t('inventory.ai_training_desc')}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.ai_desc')}</label>
+                      <textarea
+                        rows={4}
+                        value={formData.ai_custom_description || ''}
+                        onChange={(e) => setFormData({ ...formData, ai_custom_description: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none"
+                        placeholder="Detailed internal notes for the AI to use when describing this item..."
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.specifications')}</label>
+                      <textarea
+                        rows={4}
+                        value={formData.specifications || ''}
+                        onChange={(e) => setFormData({ ...formData, specifications: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none"
+                        placeholder="e.g. Weight: 200g, Material: Aluminum, Battery: 20h"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.keywords')}</label>
+                      <input
+                        type="text"
+                        value={formData.ai_keywords || ''}
+                        onChange={(e) => setFormData({ ...formData, ai_keywords: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                        placeholder="premium, durable, eco-friendly"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.target_audience')}</label>
+                      <input
+                        type="text"
+                        value={formData.target_audience || ''}
+                        onChange={(e) => setFormData({ ...formData, target_audience: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                        placeholder="e.g. Professionals, Students, Outdoor Enthusiasts"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('inventory.usage')}</label>
+                      <textarea
+                        rows={3}
+                        value={formData.usage_instructions || ''}
+                        onChange={(e) => setFormData({ ...formData, usage_instructions: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none"
+                        placeholder="How should the customer use this item?"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {activeTab === 'logistics' && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">

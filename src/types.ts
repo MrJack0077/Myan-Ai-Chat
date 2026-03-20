@@ -119,6 +119,7 @@ export interface VendorItem {
   image_url?: string | null;
   status: 'active' | 'inactive' | 'draft';
   created_at: string;
+  sort_order?: number;
   // AI Enhanced Fields
   brand?: string;
   specifications?: string; // JSON string or plain text
@@ -170,4 +171,8 @@ export interface Order {
   userId?: string;
   paymentMethod?: string;
   trackingNumber?: string;
+  customer_address?: string;
+  deli_charge?: number;
+  total_price?: number;
+  payment_slip_url?: string;
 }

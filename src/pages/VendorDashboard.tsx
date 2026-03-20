@@ -15,7 +15,8 @@ import {
   MessageSquare,
   Settings,
   FileJson,
-  Upload
+  Upload,
+  GripVertical
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { 
@@ -95,7 +96,8 @@ export default function VendorDashboard() {
   const [newCategoryName, setNewCategoryName] = useState('');
   
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
-  const [bulkStockData, setBulkStockData] = useState<{id: string, name: string, stock: number}[]>([]);
+  const [bulkStockData, setBulkStockData] = useState<{id: string, name: string, stock: number, price: number}[]>([]);
+  const [draggedBulkIndex, setDraggedBulkIndex] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     item_type: 'product' as 'product' | 'service',
     name: '',
@@ -126,8 +128,8 @@ export default function VendorDashboard() {
   const handleBulkUpdate = async () => {
     setIsSaving(true);
     try {
-      await Promise.all(bulkStockData.map(item => 
-        saveItem(effectiveShopId || '', { id: item.id, stock_quantity: item.stock })
+      await Promise.all(bulkStockData.map((item, index) => 
+        saveItem(effectiveShopId || '', { id: item.id, stock_quantity: item.stock, price: item.price, sort_order: index })
       ));
       setIsBulkModalOpen(false);
       fetchData();
@@ -139,12 +141,44 @@ export default function VendorDashboard() {
   };
 
   const openBulkUpdate = () => {
-    setBulkStockData(items.filter(i => i.item_type === 'product' && i.stock_type === 'count').map(i => ({
+    // Sort items by sort_order if available, otherwise keep existing order
+    const sortedItems = [...items.filter(i => i.item_type === 'product' && i.stock_type === 'count')].sort((a, b) => {
+      if (a.sort_order !== undefined && b.sort_order !== undefined) return a.sort_order - b.sort_order;
+      if (a.sort_order !== undefined) return -1;
+      if (b.sort_order !== undefined) return 1;
+      return 0;
+    });
+
+    setBulkStockData(sortedItems.map(i => ({
       id: i.id,
       name: i.name,
-      stock: i.stock_quantity || 0
+      stock: i.stock_quantity || 0,
+      price: i.price || 0
     })));
     setIsBulkModalOpen(true);
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedBulkIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    // Optional: Set a transparent drag image or custom visual
+  };
+
+  const handleDragEnter = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedBulkIndex === null || draggedBulkIndex === index) return;
+    
+    const newData = [...bulkStockData];
+    const draggedItem = newData[draggedBulkIndex];
+    newData.splice(draggedBulkIndex, 1);
+    newData.splice(index, 0, draggedItem);
+    
+    setDraggedBulkIndex(index);
+    setBulkStockData(newData);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedBulkIndex(null);
   };
 
   useEffect(() => {
@@ -1182,11 +1216,11 @@ export default function VendorDashboard() {
       {/* Bulk Stock Modal */}
       {isBulkModalOpen && (
         <div className="fixed inset-0 bg-zinc-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
               <div>
                 <h3 className="text-xl font-bold text-zinc-900">{t('inventory.bulk_stock_update')}</h3>
-                <p className="text-sm text-zinc-500">Quickly update stock levels for all products</p>
+                <p className="text-sm text-zinc-500">Quickly update stock levels and prices for all products</p>
               </div>
               <button onClick={() => setIsBulkModalOpen(false)} className="p-2 hover:bg-zinc-200 rounded-full transition-all">
                 <Plus className="w-6 h-6 rotate-45" />
@@ -1194,41 +1228,76 @@ export default function VendorDashboard() {
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {bulkStockData.map((item, idx) => (
-                <div key={item.id} className="flex items-center gap-4 p-4 bg-zinc-50 rounded-2xl border border-zinc-100">
-                  <div className="flex-1">
+                <div 
+                  key={item.id} 
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, idx)}
+                  onDragEnter={(e) => handleDragEnter(e, idx)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={(e) => e.preventDefault()}
+                  className={`flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-zinc-50 rounded-2xl border transition-all ${
+                    draggedBulkIndex === idx ? 'border-indigo-500 shadow-md opacity-50' : 'border-zinc-100 hover:border-zinc-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className="cursor-grab active:cursor-grabbing p-1 text-zinc-400 hover:text-zinc-600">
+                      <GripVertical className="w-5 h-5" />
+                    </div>
                     <p className="text-sm font-bold text-zinc-900">{item.name}</p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <button 
-                      onClick={() => {
-                        const newData = [...bulkStockData];
-                        newData[idx].stock = Math.max(0, newData[idx].stock - 1);
-                        setBulkStockData(newData);
-                      }}
-                      className="w-8 h-8 bg-white border border-zinc-200 rounded-lg flex items-center justify-center hover:bg-zinc-50 transition-all"
-                    >
-                      -
-                    </button>
-                    <input 
-                      type="number" 
-                      value={item.stock}
-                      onChange={(e) => {
-                        const newData = [...bulkStockData];
-                        newData[idx].stock = parseInt(e.target.value) || 0;
-                        setBulkStockData(newData);
-                      }}
-                      className="w-20 px-2 py-1 bg-white border border-zinc-200 rounded-lg text-center font-bold outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    <button 
-                      onClick={() => {
-                        const newData = [...bulkStockData];
-                        newData[idx].stock += 1;
-                        setBulkStockData(newData);
-                      }}
-                      className="w-8 h-8 bg-white border border-zinc-200 rounded-lg flex items-center justify-center hover:bg-zinc-50 transition-all"
-                    >
-                      +
-                    </button>
+                  <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-zinc-500 uppercase">Price</span>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-sm">{getCurrencySymbol(currentShop?.currency || 'USD')}</span>
+                        <input 
+                          type="number" 
+                          step="0.01"
+                          value={item.price}
+                          onChange={(e) => {
+                            const newData = [...bulkStockData];
+                            newData[idx].price = parseFloat(e.target.value) || 0;
+                            setBulkStockData(newData);
+                          }}
+                          className="w-24 pl-8 pr-2 py-1.5 bg-white border border-zinc-200 rounded-lg text-right font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-zinc-500 uppercase">Stock</span>
+                      <div className="flex items-center gap-1">
+                        <button 
+                          onClick={() => {
+                            const newData = [...bulkStockData];
+                            newData[idx].stock = Math.max(0, newData[idx].stock - 1);
+                            setBulkStockData(newData);
+                          }}
+                          className="w-8 h-8 bg-white border border-zinc-200 rounded-lg flex items-center justify-center hover:bg-zinc-50 transition-all text-zinc-600 font-bold"
+                        >
+                          -
+                        </button>
+                        <input 
+                          type="number" 
+                          value={item.stock}
+                          onChange={(e) => {
+                            const newData = [...bulkStockData];
+                            newData[idx].stock = parseInt(e.target.value) || 0;
+                            setBulkStockData(newData);
+                          }}
+                          className="w-16 px-2 py-1.5 bg-white border border-zinc-200 rounded-lg text-center font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <button 
+                          onClick={() => {
+                            const newData = [...bulkStockData];
+                            newData[idx].stock += 1;
+                            setBulkStockData(newData);
+                          }}
+                          className="w-8 h-8 bg-white border border-zinc-200 rounded-lg flex items-center justify-center hover:bg-zinc-50 transition-all text-zinc-600 font-bold"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}

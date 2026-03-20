@@ -15,6 +15,7 @@ import {
   onSnapshot,
   orderBy,
   updateDoc,
+  writeBatch,
   vector
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -126,6 +127,58 @@ export const deleteShop = async (shopId: string) => {
   await deleteDoc(docRef);
 };
 
+/**
+ * Updates specific configuration fields in a shop document and clears its semantic cache.
+ * This is useful when shop policies, delivery info, or payment methods change,
+ * requiring the AI to fetch fresh data instead of using stale cached responses.
+ * 
+ * @param shopId The ID of the shop to update.
+ * @param updatedData An object containing the fields to update.
+ * @returns An object indicating success or failure.
+ */
+export const updateShopSettingsAndClearCache = async (
+  shopId: string,
+  updatedData: Record<string, any>
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    console.log(`[updateShopSettingsAndClearCache] Starting update for shop: ${shopId}`);
+
+    // Step 1: Update the main shop document with the new settings
+    const shopRef = doc(db, 'shops', shopId);
+    await updateDoc(shopRef, updatedData);
+    console.log(`[updateShopSettingsAndClearCache] Successfully updated shop document for ${shopId}`);
+
+    // Step 2: Query the semantic_cache subcollection
+    const cacheCollectionRef = collection(db, 'shops', shopId, 'semantic_cache');
+    const cacheSnapshot = await getDocs(cacheCollectionRef);
+
+    // Step 3: Handle empty subcollection gracefully
+    if (cacheSnapshot.empty) {
+      console.log(`[updateShopSettingsAndClearCache] No documents found in semantic_cache for shop ${shopId}. Skipping deletion.`);
+      return { success: true };
+    }
+
+    // Step 4: Use writeBatch to efficiently delete all documents in the subcollection
+    const batch = writeBatch(db);
+    cacheSnapshot.forEach((docSnap) => {
+      batch.delete(docSnap.ref);
+    });
+
+    // Commit the batch deletion
+    await batch.commit();
+    console.log(`[updateShopSettingsAndClearCache] Successfully deleted ${cacheSnapshot.size} documents from semantic_cache for shop ${shopId}`);
+
+    return { success: true };
+  } catch (error) {
+    // Step 5: Error handling with clear console messages
+    console.error(`[updateShopSettingsAndClearCache] Error updating shop settings and clearing cache for ${shopId}:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'An unknown error occurred',
+    };
+  }
+};
+
 export const updateShopAIConfig = async (shopId: string, config: ShopAIConfig) => {
   const docRef = doc(db, 'shops', shopId);
   await setDoc(docRef, { aiConfig: config }, { merge: true });
@@ -150,6 +203,12 @@ export const getItems = async (shopId: string): Promise<VendorItem[]> => {
   
   // Sort in memory to handle missing created_at fields safely
   return items.sort((a, b) => {
+    if (a.sort_order !== undefined && b.sort_order !== undefined) {
+      return a.sort_order - b.sort_order;
+    }
+    if (a.sort_order !== undefined) return -1;
+    if (b.sort_order !== undefined) return 1;
+
     const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
     const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
     return dateB - dateA;
