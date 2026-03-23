@@ -60,7 +60,7 @@ export default function OrderTracking() {
     }
   };
 
-  const symbol = getCurrencySymbol(shop?.currency || 'USD');
+  const symbol = getCurrencySymbol(shop?.currency || 'MMK');
 
   const getStatusStep = (status: OrderStatus) => {
     const steps = ['pending', 'processing', 'shipped', 'delivered'];

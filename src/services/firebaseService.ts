@@ -106,6 +106,7 @@ export const saveShop = async (shop: Partial<Shop> & { vendorCredentials?: { ema
     if (shop.id) {
       const docRef = doc(db, 'shops', shop.id);
       await setDoc(docRef, shop, { merge: true });
+      await clearShopCache(shop.id);
       return shop.id;
     } else {
       const docRef = await addDoc(colRef, {
@@ -128,6 +129,38 @@ export const deleteShop = async (shopId: string) => {
 };
 
 /**
+ * Clears both the Firestore semantic_cache subcollection and the external API cache for a shop.
+ * Call this whenever shop data (products, services, settings, AI config, etc.) is updated.
+ */
+export const clearShopCache = async (shopId: string) => {
+  try {
+    console.log(`[clearShopCache] Starting cache clear for shop: ${shopId}`);
+    
+    // 1. Clear semantic_cache subcollection
+    const cacheCollectionRef = collection(db, 'shops', shopId, 'semantic_cache');
+    const cacheSnapshot = await getDocs(cacheCollectionRef);
+    
+    if (!cacheSnapshot.empty) {
+      const batch = writeBatch(db);
+      cacheSnapshot.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+      await batch.commit();
+      console.log(`[clearShopCache] Deleted ${cacheSnapshot.size} documents from semantic_cache`);
+    }
+
+    // 2. Call external API to clear backend cache
+    await fetch(`https://allchat.ddnsfree.com/api/clear-cache/${shopId}`, {
+      method: 'GET',
+      mode: 'no-cors'
+    });
+    console.log(`[clearShopCache] External API cache clear triggered for ${shopId}`);
+  } catch (error) {
+    console.error(`[clearShopCache] Error clearing cache for ${shopId}:`, error);
+  }
+};
+
+/**
  * Updates specific configuration fields in a shop document and clears its semantic cache.
  * This is useful when shop policies, delivery info, or payment methods change,
  * requiring the AI to fetch fresh data instead of using stale cached responses.
@@ -136,42 +169,33 @@ export const deleteShop = async (shopId: string) => {
  * @param updatedData An object containing the fields to update.
  * @returns An object indicating success or failure.
  */
-export const updateShopSettingsAndClearCache = async (
+export const updateShopSettings = async (
   shopId: string,
   updatedData: Record<string, any>
 ): Promise<{ success: boolean; error?: string }> => {
   try {
-    console.log(`[updateShopSettingsAndClearCache] Starting update for shop: ${shopId}`);
+    console.log(`[updateShopSettings] Starting update for shop: ${shopId}`);
+
+    const shopRef = doc(db, 'shops', shopId);
+    
+    // Check old currency before updating
+    const shopDoc = await getDoc(shopRef);
+    const oldCurrency = shopDoc.exists() ? shopDoc.data().currency : undefined;
 
     // Step 1: Update the main shop document with the new settings
-    const shopRef = doc(db, 'shops', shopId);
     await updateDoc(shopRef, updatedData);
-    console.log(`[updateShopSettingsAndClearCache] Successfully updated shop document for ${shopId}`);
+    console.log(`[updateShopSettings] Successfully updated shop document for ${shopId}`);
 
-    // Step 2: Query the semantic_cache subcollection
-    const cacheCollectionRef = collection(db, 'shops', shopId, 'semantic_cache');
-    const cacheSnapshot = await getDocs(cacheCollectionRef);
-
-    // Step 3: Handle empty subcollection gracefully
-    if (cacheSnapshot.empty) {
-      console.log(`[updateShopSettingsAndClearCache] No documents found in semantic_cache for shop ${shopId}. Skipping deletion.`);
-      return { success: true };
+    // Step 2: If currency changed, reindex inventory in the background so AI embeddings use the new currency
+    if (updatedData.currency && updatedData.currency !== oldCurrency) {
+      console.log(`[updateShopSettings] Currency changed from ${oldCurrency} to ${updatedData.currency}. Reindexing inventory...`);
+      reindexShopInventory(shopId).catch(err => console.error('Failed to reindex inventory after currency change:', err));
     }
-
-    // Step 4: Use writeBatch to efficiently delete all documents in the subcollection
-    const batch = writeBatch(db);
-    cacheSnapshot.forEach((docSnap) => {
-      batch.delete(docSnap.ref);
-    });
-
-    // Commit the batch deletion
-    await batch.commit();
-    console.log(`[updateShopSettingsAndClearCache] Successfully deleted ${cacheSnapshot.size} documents from semantic_cache for shop ${shopId}`);
 
     return { success: true };
   } catch (error) {
     // Step 5: Error handling with clear console messages
-    console.error(`[updateShopSettingsAndClearCache] Error updating shop settings and clearing cache for ${shopId}:`, error);
+    console.error(`[updateShopSettings] Error updating shop settings for ${shopId}:`, error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'An unknown error occurred',
@@ -215,10 +239,14 @@ export const getItems = async (shopId: string): Promise<VendorItem[]> => {
   });
 };
 
-export const saveItem = async (shopId: string, item: Partial<VendorItem>) => {
+export const saveItem = async (shopId: string, item: Partial<VendorItem>, skipCacheClear: boolean = false) => {
+  // Fetch shop to get currency
+  const shopDoc = await getDoc(doc(db, 'shops', shopId));
+  const shopCurrency = shopDoc.exists() ? (shopDoc.data().currency || 'MMK') : 'MMK';
+
   // Prepare item data for embedding
   const status = (item.is_available && (item.stock_quantity || 0) > 0) ? "Available" : "Out of Stock";
-  const textToEmbed = `Product: ${item.name || ''}. Price: ${item.price || 0} MMK. Status: ${status}. Description: ${item.description || ''}.`.trim();
+  const textToEmbed = `Product: ${item.name || ''}. Price: ${item.price || 0} ${shopCurrency}. Status: ${status}. Description: ${item.description || ''}.`.trim();
 
   let embedding: number[] | undefined = item.embedding && item.embedding.length > 0 ? item.embedding : undefined;
   
@@ -247,19 +275,6 @@ export const saveItem = async (shopId: string, item: Partial<VendorItem>) => {
   }
 
   await setDoc(docRef, finalItem, { merge: true });
-
-  // Clear semantic cache to ensure AI doesn't remember old data
-  try {
-    const cacheRef = collection(db, "shops", shopId, "semantic_cache");
-    const cacheSnapshot = await getDocs(cacheRef);
-    const deletePromises = cacheSnapshot.docs.map((cacheDoc) => 
-      deleteDoc(doc(db, "shops", shopId, "semantic_cache", cacheDoc.id))
-    );
-    await Promise.all(deletePromises);
-    console.log("🧹 Semantic cache cleared.");
-  } catch (cacheError) {
-    console.error("Failed to clear semantic cache:", cacheError);
-  }
 
   return itemId;
 };
@@ -294,6 +309,9 @@ export const generateEmbedding = async (text: string): Promise<number[]> => {
 };
 
 export const updateItemEmbedding = async (shopId: string, itemId: string) => {
+  const shopDoc = await getDoc(doc(db, 'shops', shopId));
+  const shopCurrency = shopDoc.exists() ? (shopDoc.data().currency || 'MMK') : 'MMK';
+
   const itemDoc = await getDoc(doc(db, 'shops', shopId, 'items', itemId));
   if (!itemDoc.exists()) return;
 
@@ -301,7 +319,7 @@ export const updateItemEmbedding = async (shopId: string, itemId: string) => {
   const textToEmbed = `
     Item Name: ${item.name}
     Category: ${item.category}
-    Price: ${item.price}
+    Price: ${item.price} ${shopCurrency}
     Description: ${item.description || ''}
     Specs: ${item.specifications || ''}
     AI Description: ${item.ai_custom_description || ''}
@@ -348,7 +366,7 @@ const magnitude = (a: number[]) => Math.sqrt(a.reduce((sum, val) => sum + val * 
 export const reindexShopInventory = async (shopId: string) => {
   const items = await getItems(shopId);
   for (const item of items) {
-    await saveItem(shopId, item);
+    await saveItem(shopId, item, true);
   }
 };
 
@@ -381,7 +399,7 @@ export const bulkSaveItems = async (shopId: string, items: Partial<VendorItem>[]
       is_available: true,
       ...item
     };
-    const id = await saveItem(shopId, preparedItem);
+    const id = await saveItem(shopId, preparedItem, true); // Skip cache clear per item
     results.push(id);
   }
   return results;
@@ -398,14 +416,15 @@ export const getFAQs = async (shopId: string): Promise<FAQ[]> => {
 
 export const saveFAQ = async (shopId: string, faq: Partial<FAQ>) => {
   const colRef = collection(db, 'shops', shopId, 'faqs');
-  if (faq.id) {
-    const docRef = doc(db, 'shops', shopId, 'faqs', faq.id);
+  let id = faq.id;
+  if (id) {
+    const docRef = doc(db, 'shops', shopId, 'faqs', id);
     await setDoc(docRef, faq, { merge: true });
-    return faq.id;
   } else {
     const docRef = await addDoc(colRef, faq);
-    return docRef.id;
+    id = docRef.id;
   }
+  return id;
 };
 
 export const deleteFAQ = async (shopId: string, faqId: string) => {
@@ -533,14 +552,19 @@ export const updateOrderStatus = async (shopId: string, orderId: string, status:
     const orderSnap = await getDoc(docRef);
     if (orderSnap.exists()) {
       const orderData = orderSnap.data() as Order;
+      let stockUpdated = false;
       for (const item of orderData.items) {
         if (item.itemId && item.itemId !== 'bot-generated') {
           const itemRef = doc(db, 'shops', shopId, 'items', item.itemId);
           const itemSnap = await getDoc(itemRef);
           if (itemSnap.exists()) {
-            const currentStock = itemSnap.data().stock_quantity || 0;
+            const itemData = itemSnap.data() as VendorItem;
+            const currentStock = itemData.stock_quantity || 0;
             const newStock = Math.max(0, currentStock - item.quantity);
-            await setDoc(itemRef, { stock_quantity: newStock }, { merge: true });
+            
+            // Use saveItem to ensure embeddings are updated
+            await saveItem(shopId, { ...itemData, stock_quantity: newStock }, true);
+            stockUpdated = true;
           }
         }
       }

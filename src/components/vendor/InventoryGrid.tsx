@@ -11,7 +11,7 @@ interface InventoryGridProps {
   currency?: string;
 }
 
-export default function InventoryGrid({ items, onEdit, onDelete, onToggleStatus, currency = 'USD' }: InventoryGridProps) {
+export default function InventoryGrid({ items, onEdit, onDelete, onToggleStatus, currency = 'MMK' }: InventoryGridProps) {
   const { t } = useTranslation();
 
   const getCurrencySymbol = (code: string) => {

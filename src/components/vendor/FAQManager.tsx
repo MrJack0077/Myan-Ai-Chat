@@ -4,7 +4,7 @@ import { FAQ } from '../../types';
 import { getFAQs, saveFAQ, deleteFAQ } from '../../services/firebaseService';
 import { useTranslation } from 'react-i18next';
 
-export default function FAQManager({ shopId }: { shopId: string }) {
+export default function FAQManager({ shopId, onUnsynced }: { shopId: string, onUnsynced?: () => void }) {
   const { t } = useTranslation();
   const [faqs, setFaqs] = useState<FAQ[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -39,6 +39,7 @@ export default function FAQManager({ shopId }: { shopId: string }) {
     try {
       const faqData = editingFaq ? { ...formData, id: editingFaq.id } : formData;
       await saveFAQ(shopId, faqData);
+      if (onUnsynced) onUnsynced();
       setIsModalOpen(false);
       setEditingFaq(null);
       setFormData({ question: '', answer: '', category: 'General' });
@@ -66,6 +67,7 @@ export default function FAQManager({ shopId }: { shopId: string }) {
     if (!faqToDelete) return;
     try {
       await deleteFAQ(shopId, faqToDelete);
+      if (onUnsynced) onUnsynced();
       setFaqToDelete(null);
       fetchFaqs();
     } catch (error) {

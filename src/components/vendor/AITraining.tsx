@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Bot, Save, Sparkles, MessageSquare, Languages, Zap, Plus, Trash2, Send, Terminal, ShieldCheck, UserCheck, History, HelpCircle, ArrowRight, Mail, Phone, AlertTriangle, FileText, Link as LinkIcon, RefreshCw, CheckCircle2 } from 'lucide-react';
-import { ShopAIConfig } from '../../types';
-import { updateShopAIConfig, reindexShopInventory } from '../../services/firebaseService';
+import { ShopAIConfig, Shop } from '../../types';
+import { reindexShopInventory, saveShop, updateShopSettings } from '../../services/firebaseService';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '../Toast';
 
-export default function AITraining({ initialConfig, shopId }: { initialConfig?: ShopAIConfig, shopId?: string }) {
+export default function AITraining({ initialConfig, shopId, currentShop, onUnsynced }: { initialConfig?: ShopAIConfig, shopId?: string, currentShop?: Shop | null, onUnsynced?: () => void }) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -19,6 +21,22 @@ export default function AITraining({ initialConfig, shopId }: { initialConfig?: 
   const [lastSynced, setLastSynced] = useState<string>(new Date().toLocaleString());
   const [showKBModal, setShowKBModal] = useState(false);
   const [newKBItem, setNewKBItem] = useState({ title: '', content: '', url: '', type: 'text' as 'text' | 'url' });
+  
+  const [shopSettings, setShopSettings] = useState({
+    currency: currentShop?.currency || 'MMK',
+    paymentInfo: currentShop?.paymentInfo || [],
+    deliveryInfo: currentShop?.deliveryInfo || []
+  });
+
+  useEffect(() => {
+    if (currentShop) {
+      setShopSettings({
+        currency: currentShop.currency || 'MMK',
+        paymentInfo: currentShop.paymentInfo || [],
+        deliveryInfo: currentShop.deliveryInfo || []
+      });
+    }
+  }, [currentShop]);
   
   const [config, setConfig] = useState<ShopAIConfig>(initialConfig || {
     botName: 'My Shop Assistant',
@@ -58,17 +76,33 @@ export default function AITraining({ initialConfig, shopId }: { initialConfig?: 
     }
   }, [initialConfig]);
 
-  const handleSave = async (section?: string) => {
+  const handleSaveAllSettings = async (section?: string) => {
     setIsSaving(true);
     try {
       const targetShopId = shopId || user?.shopId;
-      if (targetShopId) {
-        await updateShopAIConfig(targetShopId, config);
-        showToast(section ? `${section} saved successfully!` : 'AI Configuration updated!', 'success');
+      if (!targetShopId) throw new Error('No shop ID found');
+
+      // 1. Collect Data: `config` state already holds the structured JavaScript object
+      // 2. Firestore Update: Use updateShopSettings
+      const result = await updateShopSettings(targetShopId, { 
+        aiConfig: config,
+        currency: shopSettings.currency,
+        paymentInfo: shopSettings.paymentInfo,
+        deliveryInfo: shopSettings.deliveryInfo
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update settings');
       }
+
+      if (onUnsynced) onUnsynced();
+
+      // 4. UI Feedback: Success
+      showToast('Settings updated and AI bot cache cleared!', 'success');
     } catch (error) {
-      console.error('Failed to update AI config:', error);
-      showToast('Failed to save configuration', 'error');
+      // 4. UI Feedback: Error
+      console.error('Failed to update AI config and clear cache:', error);
+      showToast('Failed to save configuration or clear cache', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -161,6 +195,165 @@ export default function AITraining({ initialConfig, shopId }: { initialConfig?: 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Configuration Form */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Shop Settings Section */}
+          <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-6">
+            <div className="flex items-center justify-between pb-6 border-b border-zinc-100">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-zinc-900">ဆိုင်ဆက်တင်များ (Shop Settings)</h3>
+                  <p className="text-sm text-zinc-500">Configure currency, payment, and delivery info</p>
+                </div>
+              </div>
+              <button
+                onClick={() => handleSaveAllSettings('Shop Settings')}
+                disabled={isSaving}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {isSaving ? 'Saving...' : t('common.save')}
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Currency */}
+              <div>
+                <label className="block text-sm font-semibold text-zinc-700 mb-1.5">ငွေကြေး (Currency)</label>
+                <select
+                  value={shopSettings.currency}
+                  onChange={(e) => setShopSettings({ ...shopSettings, currency: e.target.value as any })}
+                  className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all bg-white"
+                >
+                  <option value="USD">US Dollar ($)</option>
+                  <option value="MMK">Myanmar Kyat (Ks)</option>
+                  <option value="THB">Thai Baht (฿)</option>
+                </select>
+              </div>
+
+              {/* Payment Info */}
+              <div className="pt-6 border-t border-zinc-100">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-bold text-zinc-900">ငွေပေးချေမှု အချက်အလက် (Payment Info)</h4>
+                  <button 
+                    onClick={() => {
+                      const newPayment = { id: Math.random().toString(36).substr(2, 9), type: '', accountName: '', accountNumber: '' };
+                      setShopSettings({ ...shopSettings, paymentInfo: [...shopSettings.paymentInfo, newPayment] });
+                    }}
+                    className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> Add Payment Method
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {shopSettings.paymentInfo.map((payment, idx) => (
+                    <div key={payment.id} className="p-4 bg-zinc-50 rounded-2xl border border-zinc-200 space-y-3 relative group">
+                      <button 
+                        onClick={() => {
+                          const updated = shopSettings.paymentInfo.filter(p => p.id !== payment.id);
+                          setShopSettings({ ...shopSettings, paymentInfo: updated });
+                        }}
+                        className="absolute top-2 right-2 p-1 text-zinc-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        <Plus className="w-4 h-4 rotate-45" />
+                      </button>
+                      <div className="grid grid-cols-2 gap-3">
+                        <input 
+                          placeholder="Payment Type (e.g. KPay)"
+                          value={payment.type}
+                          onChange={(e) => {
+                            const updated = [...shopSettings.paymentInfo];
+                            updated[idx].type = e.target.value;
+                            setShopSettings({ ...shopSettings, paymentInfo: updated });
+                          }}
+                          className="px-3 py-2 rounded-lg border border-zinc-200 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <input 
+                          placeholder="Account Name"
+                          value={payment.accountName}
+                          onChange={(e) => {
+                            const updated = [...shopSettings.paymentInfo];
+                            updated[idx].accountName = e.target.value;
+                            setShopSettings({ ...shopSettings, paymentInfo: updated });
+                          }}
+                          className="px-3 py-2 rounded-lg border border-zinc-200 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <input 
+                        placeholder="Account Number"
+                        value={payment.accountNumber}
+                        onChange={(e) => {
+                          const updated = [...shopSettings.paymentInfo];
+                          updated[idx].accountNumber = e.target.value;
+                          setShopSettings({ ...shopSettings, paymentInfo: updated });
+                        }}
+                        className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Delivery Info */}
+              <div className="pt-6 border-t border-zinc-100">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-bold text-zinc-900">ပို့ဆောင်ခများ (Delivery Info)</h4>
+                  <button 
+                    onClick={() => {
+                      const newDeli = { id: Math.random().toString(36).substr(2, 9), region: '', amount: 0 };
+                      setShopSettings({ ...shopSettings, deliveryInfo: [...shopSettings.deliveryInfo, newDeli] });
+                    }}
+                    className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> Add Region
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {shopSettings.deliveryInfo.map((deli, idx) => (
+                    <div key={deli.id} className="p-4 bg-zinc-50 rounded-2xl border border-zinc-200 space-y-3 relative group">
+                      <button 
+                        onClick={() => {
+                          const updated = shopSettings.deliveryInfo.filter(d => d.id !== deli.id);
+                          setShopSettings({ ...shopSettings, deliveryInfo: updated });
+                        }}
+                        className="absolute top-2 right-2 p-1 text-zinc-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        <Plus className="w-4 h-4 rotate-45" />
+                      </button>
+                      <div className="grid grid-cols-2 gap-3">
+                        <input 
+                          placeholder="Region"
+                          value={deli.region}
+                          onChange={(e) => {
+                            const updated = [...shopSettings.deliveryInfo];
+                            updated[idx].region = e.target.value;
+                            setShopSettings({ ...shopSettings, deliveryInfo: updated });
+                          }}
+                          className="px-3 py-2 rounded-lg border border-zinc-200 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-400 font-bold">{shopSettings.currency}</span>
+                          <input 
+                            type="number"
+                            placeholder="Amount"
+                            value={deli.amount}
+                            onChange={(e) => {
+                              const updated = [...shopSettings.deliveryInfo];
+                              updated[idx].amount = parseFloat(e.target.value) || 0;
+                              setShopSettings({ ...shopSettings, deliveryInfo: updated });
+                            }}
+                            className="w-full pl-10 pr-3 py-2 rounded-lg border border-zinc-200 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-6">
             <div className="flex items-center justify-between pb-6 border-b border-zinc-100">
               <div className="flex items-center gap-3">
@@ -173,12 +366,12 @@ export default function AITraining({ initialConfig, shopId }: { initialConfig?: 
                 </div>
               </div>
               <button
-                onClick={() => handleSave(t('ai_training.bot_identity'))}
+                onClick={() => handleSaveAllSettings(t('ai_training.bot_identity'))}
                 disabled={isSaving}
                 className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
-                {t('common.save')}
+                {isSaving ? 'Saving...' : t('common.save')}
               </button>
             </div>
 
@@ -315,12 +508,12 @@ export default function AITraining({ initialConfig, shopId }: { initialConfig?: 
                 </div>
               </div>
               <button
-                onClick={() => handleSave(t('ai_training.shop_policies'))}
+                onClick={() => handleSaveAllSettings(t('ai_training.shop_policies'))}
                 disabled={isSaving}
                 className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
-                {t('common.save')}
+                {isSaving ? 'Saving...' : t('common.save')}
               </button>
             </div>
 
@@ -380,12 +573,12 @@ export default function AITraining({ initialConfig, shopId }: { initialConfig?: 
                 </div>
               </div>
               <button
-                onClick={() => handleSave(t('ai_training.behavioral_constraints'))}
+                onClick={() => handleSaveAllSettings(t('ai_training.behavioral_constraints'))}
                 disabled={isSaving}
                 className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
-                {t('common.save')}
+                {isSaving ? 'Saving...' : t('common.save')}
               </button>
             </div>
 
@@ -438,12 +631,12 @@ export default function AITraining({ initialConfig, shopId }: { initialConfig?: 
                 </div>
               </div>
               <button
-                onClick={() => handleSave(t('ai_training.standard_responses'))}
+                onClick={() => handleSaveAllSettings(t('ai_training.standard_responses'))}
                 disabled={isSaving}
                 className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
-                {t('common.save')}
+                {isSaving ? 'Saving...' : t('common.save')}
               </button>
             </div>
 

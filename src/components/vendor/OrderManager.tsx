@@ -42,7 +42,7 @@ import { BotUser } from '../../services/firebaseService';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-export default function OrderManager({ shopId, currency = 'USD' }: { shopId: string, currency?: string }) {
+export default function OrderManager({ shopId, currency = 'MMK' }: { shopId: string, currency?: string }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
 

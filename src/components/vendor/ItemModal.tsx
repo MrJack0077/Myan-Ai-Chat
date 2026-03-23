@@ -25,7 +25,7 @@ export default function ItemModal({
   setFormData, 
   onSubmit,
   isSaving = false,
-  currency = 'USD'
+  currency = 'MMK'
 }: ItemModalProps) {
   const { t } = useTranslation();
 

@@ -16,7 +16,8 @@ import {
   Settings,
   FileJson,
   Upload,
-  GripVertical
+  GripVertical,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { 
@@ -31,7 +32,8 @@ import {
   deleteItem,
   saveFAQ,
   saveShop,
-  bulkSaveItems
+  bulkSaveItems,
+  clearShopCache
 } from '../services/firebaseService';
 import { VendorItem, Category, FAQ, Shop, Order } from '../types';
 import VendorStats from '../components/vendor/VendorStats';
@@ -125,12 +127,49 @@ export default function VendorDashboard() {
     sub_items: [] as any[]
   });
 
+  const [hasUnsyncedChanges, setHasUnsyncedChanges] = useState(() => {
+    return localStorage.getItem(`unsynced_${effectiveShopId}`) === 'true';
+  });
+  const [isSyncingAI, setIsSyncingAI] = useState(false);
+
+  useEffect(() => {
+    if (effectiveShopId) {
+      setHasUnsyncedChanges(localStorage.getItem(`unsynced_${effectiveShopId}`) === 'true');
+    }
+  }, [effectiveShopId]);
+
+  const markUnsynced = () => {
+    setHasUnsyncedChanges(true);
+    localStorage.setItem(`unsynced_${effectiveShopId}`, 'true');
+  };
+
+  const clearUnsynced = () => {
+    setHasUnsyncedChanges(false);
+    localStorage.removeItem(`unsynced_${effectiveShopId}`);
+  };
+
+  const handleForceSyncAI = async () => {
+    if (!effectiveShopId) return;
+    setIsSyncingAI(true);
+    try {
+      await clearShopCache(effectiveShopId);
+      clearUnsynced();
+      showToast(t('dashboard.ai_synced_success', 'AI Knowledge Base Successfully Synced'), 'success');
+    } catch (error) {
+      console.error('Failed to sync AI:', error);
+      showToast(t('dashboard.ai_sync_error', 'Failed to sync AI Knowledge Base'), 'error');
+    } finally {
+      setIsSyncingAI(false);
+    }
+  };
+
   const handleBulkUpdate = async () => {
     setIsSaving(true);
     try {
       await Promise.all(bulkStockData.map((item, index) => 
-        saveItem(effectiveShopId || '', { id: item.id, stock_quantity: item.stock, price: item.price, sort_order: index })
+        saveItem(effectiveShopId || '', { id: item.id, stock_quantity: item.stock, price: item.price, sort_order: index }, true)
       ));
+      markUnsynced();
       setIsBulkModalOpen(false);
       fetchData();
     } catch (error) {
@@ -246,6 +285,7 @@ export default function VendorDashboard() {
       reader.onloadend = async () => {
         const base64String = reader.result as string;
         await saveShop({ id: effectiveShopId, logoUrl: base64String });
+        markUnsynced();
         setCurrentShop(prev => prev ? { ...prev, logoUrl: base64String } : null);
         showToast('Shop logo updated successfully', 'success');
       };
@@ -261,6 +301,7 @@ export default function VendorDashboard() {
     if (!newCategoryName.trim()) return;
     try {
       await addCategory(effectiveShopId || '', newCategoryName);
+      markUnsynced();
       setNewCategoryName('');
       fetchData();
     } catch (error) {
@@ -277,6 +318,7 @@ export default function VendorDashboard() {
     setIsSaving(true);
     try {
       await deleteCategory(effectiveShopId || '', categoryToDelete);
+      markUnsynced();
       showToast('Category deleted successfully', 'success');
       setCategoryToDelete(null);
       fetchData();
@@ -370,6 +412,7 @@ export default function VendorDashboard() {
     try {
       const finalItemData = editingItem ? { ...itemData, id: editingItem.id } : itemData;
       await saveItem(effectiveShopId || '', finalItemData);
+      markUnsynced();
       setIsModalOpen(false);
       fetchData();
     } catch (error) {
@@ -388,6 +431,7 @@ export default function VendorDashboard() {
     setIsSaving(true);
     try {
       await deleteItem(effectiveShopId || '', itemToDelete);
+      markUnsynced();
       showToast('Item deleted successfully', 'success');
       setItemToDelete(null);
       fetchData();
@@ -403,6 +447,7 @@ export default function VendorDashboard() {
     const newStatus = item.status === 'active' ? 'inactive' : 'active';
     try {
       await saveItem(effectiveShopId || '', { id: item.id, status: newStatus });
+      markUnsynced();
       fetchData();
     } catch (error) {
       console.error('Failed to toggle status:', error);
@@ -413,6 +458,7 @@ export default function VendorDashboard() {
     setIsSaving(true);
     try {
       await bulkSaveItems(effectiveShopId || '', itemsToImport);
+      markUnsynced();
       showToast(`Successfully imported ${itemsToImport.length} items`, 'success');
       fetchData();
     } catch (error) {
@@ -446,7 +492,7 @@ export default function VendorDashboard() {
     }
   };
 
-  const symbol = getCurrencySymbol(currentShop?.currency || 'USD');
+  const symbol = getCurrencySymbol(currentShop?.currency || 'MMK');
 
   const generateAIContext = () => {
     let context = `AI Agent Configuration & Knowledge Base\n`;
@@ -566,13 +612,31 @@ export default function VendorDashboard() {
             {activeTab === 'dashboard' ? t('dashboard.overview_desc') : `${t('dashboard.manage_desc')} ${t(`nav.${activeTab.replace('-', '_')}`)}`}
           </p>
         </div>
-        <button 
-          onClick={() => setIsAIModalOpen(true)}
-          className="flex items-center justify-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200"
-        >
-          <Clock className="w-4 h-4" />
-          AI Context Export
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleForceSyncAI}
+            disabled={isSyncingAI || !hasUnsyncedChanges}
+            className={`relative flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm ${
+              hasUnsyncedChanges 
+                ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200' 
+                : 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+            }`}
+            title={hasUnsyncedChanges ? "Sync changes to AI" : "AI is up to date"}
+          >
+            {hasUnsyncedChanges && (
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-pulse"></span>
+            )}
+            <RefreshCw className={`w-4 h-4 ${isSyncingAI ? 'animate-spin' : ''}`} />
+            {isSyncingAI ? t('dashboard.syncing', 'Syncing...') : t('dashboard.force_sync', 'Sync AI')}
+          </button>
+          <button 
+            onClick={() => setIsAIModalOpen(true)}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200"
+          >
+            <Clock className="w-4 h-4" />
+            AI Context Export
+          </button>
+        </div>
       </div>
 
       {/* Main Content Area */}
@@ -849,6 +913,7 @@ export default function VendorDashboard() {
                         onBlur={async () => {
                           if (effectiveShopId && currentShop) {
                             await saveShop({ id: effectiveShopId, name: currentShop.name });
+                            markUnsynced();
                             showToast('Shop name updated', 'success');
                           }
                         }}
@@ -877,6 +942,7 @@ export default function VendorDashboard() {
                         onClick={async () => {
                           const newStatus = currentShop?.status === 'active' ? 'inactive' : 'active';
                           await saveShop({ id: effectiveShopId, status: newStatus });
+                          markUnsynced();
                           setCurrentShop(prev => prev ? { ...prev, status: newStatus } : null);
                           showToast(`Shop ${newStatus === 'active' ? 'activated' : 'deactivated'}`, 'success');
                         }}
@@ -908,168 +974,7 @@ export default function VendorDashboard() {
                   </div>
 
                   <div className="pt-6 border-t border-zinc-100">
-                    <h4 className="text-sm font-bold text-zinc-900 mb-4">{t('shop.settings')}</h4>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-semibold text-zinc-700 mb-1.5">{t('shop.currency')}</label>
-                        <select
-                          value={currentShop?.currency || 'USD'}
-                          onChange={async (e) => {
-                            const newCurrency = e.target.value as any;
-                            setCurrentShop(prev => prev ? { ...prev, currency: newCurrency } : null);
-                            await saveShop({ id: effectiveShopId, currency: newCurrency });
-                            showToast(t('shop.currency_updated'), 'success');
-                          }}
-                          className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all bg-white"
-                        >
-                          <option value="USD">US Dollar ($)</option>
-                          <option value="MMK">Myanmar Kyat (Ks)</option>
-                          <option value="THB">Thai Baht (฿)</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-6 border-t border-zinc-100">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-sm font-bold text-zinc-900">{t('shop.payment_info')}</h4>
-                      <button 
-                        onClick={() => {
-                          const newPayment = { id: Math.random().toString(36).substr(2, 9), type: '', accountName: '', accountNumber: '' };
-                          const updated = [...(currentShop?.paymentInfo || []), newPayment];
-                          setCurrentShop(prev => prev ? { ...prev, paymentInfo: updated } : null);
-                        }}
-                        className="text-xs font-bold text-indigo-600 hover:underline"
-                      >
-                        + Add Payment Method
-                      </button>
-                    </div>
-                    <div className="space-y-3">
-                      {currentShop?.paymentInfo?.map((payment, idx) => (
-                        <div key={payment.id} className="p-4 bg-zinc-50 rounded-2xl border border-zinc-200 space-y-3 relative group">
-                          <button 
-                            onClick={() => {
-                              const updated = currentShop.paymentInfo?.filter(p => p.id !== payment.id);
-                              setCurrentShop(prev => prev ? { ...prev, paymentInfo: updated } : null);
-                            }}
-                            className="absolute top-2 right-2 p-1 text-zinc-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                          >
-                            <Plus className="w-4 h-4 rotate-45" />
-                          </button>
-                          <div className="grid grid-cols-2 gap-3">
-                            <input 
-                              placeholder={t('shop.payment_type_placeholder')}
-                              value={payment.type}
-                              onChange={(e) => {
-                                const updated = [...(currentShop.paymentInfo || [])];
-                                updated[idx].type = e.target.value;
-                                setCurrentShop(prev => prev ? { ...prev, paymentInfo: updated } : null);
-                              }}
-                              className="px-3 py-2 rounded-lg border border-zinc-200 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
-                            <input 
-                              placeholder={t('shop.account_name_placeholder')}
-                              value={payment.accountName}
-                              onChange={(e) => {
-                                const updated = [...(currentShop.paymentInfo || [])];
-                                updated[idx].accountName = e.target.value;
-                                setCurrentShop(prev => prev ? { ...prev, paymentInfo: updated } : null);
-                              }}
-                              className="px-3 py-2 rounded-lg border border-zinc-200 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
-                          </div>
-                          <input 
-                            placeholder={t('shop.account_number_placeholder')}
-                            value={payment.accountNumber}
-                            onChange={(e) => {
-                              const updated = [...(currentShop.paymentInfo || [])];
-                              updated[idx].accountNumber = e.target.value;
-                              setCurrentShop(prev => prev ? { ...prev, paymentInfo: updated } : null);
-                            }}
-                            className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </div>
-                      ))}
-                      {currentShop?.paymentInfo && currentShop.paymentInfo.length > 0 && (
-                        <button 
-                          onClick={async () => {
-                            await saveShop({ id: effectiveShopId, paymentInfo: currentShop.paymentInfo });
-                            showToast(t('shop.payment_info_saved'), 'success');
-                          }}
-                          className="w-full py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all"
-                        >
-                          {t('shop.save_payment_info')}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="pt-6 border-t border-zinc-100">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-sm font-bold text-zinc-900">{t('shop.delivery_info')}</h4>
-                      <button 
-                        onClick={() => {
-                          const newDeli = { id: Math.random().toString(36).substr(2, 9), region: '', amount: 0 };
-                          const updated = [...(currentShop?.deliveryInfo || []), newDeli];
-                          setCurrentShop(prev => prev ? { ...prev, deliveryInfo: updated } : null);
-                        }}
-                        className="text-xs font-bold text-indigo-600 hover:underline"
-                      >
-                        + Add Region
-                      </button>
-                    </div>
-                    <div className="space-y-3">
-                      {currentShop?.deliveryInfo?.map((deli, idx) => (
-                        <div key={deli.id} className="p-4 bg-zinc-50 rounded-2xl border border-zinc-200 space-y-3 relative group">
-                          <button 
-                            onClick={() => {
-                              const updated = currentShop.deliveryInfo?.filter(d => d.id !== deli.id);
-                              setCurrentShop(prev => prev ? { ...prev, deliveryInfo: updated } : null);
-                            }}
-                            className="absolute top-2 right-2 p-1 text-zinc-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                          >
-                            <Plus className="w-4 h-4 rotate-45" />
-                          </button>
-                          <div className="grid grid-cols-2 gap-3">
-                            <input 
-                              placeholder={t('shop.region_placeholder')}
-                              value={deli.region}
-                              onChange={(e) => {
-                                const updated = [...(currentShop.deliveryInfo || [])];
-                                updated[idx].region = e.target.value;
-                                setCurrentShop(prev => prev ? { ...prev, deliveryInfo: updated } : null);
-                              }}
-                              className="px-3 py-2 rounded-lg border border-zinc-200 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
-                            <div className="relative">
-                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-400 font-bold">{currentShop?.currency || 'USD'}</span>
-                              <input 
-                                type="number"
-                                placeholder={t('shop.amount_placeholder')}
-                                value={deli.amount}
-                                onChange={(e) => {
-                                  const updated = [...(currentShop.deliveryInfo || [])];
-                                  updated[idx].amount = parseFloat(e.target.value) || 0;
-                                  setCurrentShop(prev => prev ? { ...prev, deliveryInfo: updated } : null);
-                                }}
-                                className="w-full pl-10 pr-3 py-2 rounded-lg border border-zinc-200 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                      {currentShop?.deliveryInfo && currentShop.deliveryInfo.length > 0 && (
-                        <button 
-                          onClick={async () => {
-                            await saveShop({ id: effectiveShopId, deliveryInfo: currentShop.deliveryInfo });
-                            showToast(t('shop.delivery_info_saved'), 'success');
-                          }}
-                          className="w-full py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all"
-                        >
-                          {t('shop.save_delivery_info')}
-                        </button>
-                      )}
-                    </div>
+                    {/* Settings moved to AI Training page */}
                   </div>
                 </div>
               </div>
@@ -1118,11 +1023,11 @@ export default function VendorDashboard() {
         {activeTab === 'ai-training' && (
           <div className="space-y-12">
             <section>
-              <AITraining initialConfig={currentShop?.aiConfig} shopId={effectiveShopId || ''} />
+              <AITraining initialConfig={currentShop?.aiConfig} shopId={effectiveShopId || ''} currentShop={currentShop} onUnsynced={markUnsynced} />
             </section>
             
             <section className="pt-12 border-t border-zinc-200">
-              <FAQManager shopId={effectiveShopId || ''} />
+              <FAQManager shopId={effectiveShopId || ''} onUnsynced={markUnsynced} />
             </section>
           </div>
         )}
@@ -1249,7 +1154,7 @@ export default function VendorDashboard() {
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-zinc-500 uppercase">Price</span>
                       <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-sm">{getCurrencySymbol(currentShop?.currency || 'USD')}</span>
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-sm">{getCurrencySymbol(currentShop?.currency || 'MMK')}</span>
                         <input 
                           type="number" 
                           step="0.01"
