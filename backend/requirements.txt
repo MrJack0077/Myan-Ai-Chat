@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+google-generativeai
+google-cloud-firestore
+redis
+httpx
+Pillow
+python-dotenv
+tenacity

@@ -67,8 +67,13 @@ export default function AITraining({ initialConfig, shopId, currentShop, onUnsyn
         { id: '2', question: 'Can I pay with Bitcoin?', timestamp: new Date().toISOString() }
       ],
       corrections: []
-    }
-  });
+    },
+    advancedTuning: {
+      upsellFocus: 'balanced',
+      strictness: 'high'
+    },
+    faqs: []
+  } as ShopAIConfig);
 
   useEffect(() => {
     if (initialConfig) {
@@ -615,6 +620,147 @@ export default function AITraining({ initialConfig, shopId, currentShop, onUnsyn
                 {(!config.constraints || config.constraints.length === 0) && (
                   <p className="text-center text-zinc-400 text-sm py-4 italic">{t('ai_training.no_constraints')}</p>
                 )}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-6">
+            <div className="flex items-center justify-between pb-6 border-b border-zinc-100">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center">
+                  <HelpCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-zinc-900">FAQ Builder</h3>
+                  <p className="text-sm text-zinc-500">Add common questions and answers for the AI to use</p>
+                </div>
+              </div>
+              <button
+                onClick={() => handleSaveAllSettings('FAQs')}
+                disabled={isSaving}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {isSaving ? 'Saving...' : t('common.save')}
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {(config.faqs || []).map((faq, index) => (
+                <div key={faq.id} className="p-4 rounded-2xl border border-zinc-100 bg-zinc-50/50 space-y-3 relative group">
+                  <button 
+                    onClick={() => {
+                      const newFaqs = [...(config.faqs || [])];
+                      newFaqs.splice(index, 1);
+                      setConfig({ ...config, faqs: newFaqs });
+                    }}
+                    className="absolute top-4 right-4 p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <div>
+                    <input 
+                      type="text"
+                      placeholder="Question"
+                      value={faq.question}
+                      onChange={(e) => {
+                        const newFaqs = [...(config.faqs || [])];
+                        newFaqs[index].question = e.target.value;
+                        setConfig({ ...config, faqs: newFaqs });
+                      }}
+                      className="w-full bg-transparent border-none focus:ring-0 font-bold text-zinc-900 p-0 placeholder:text-zinc-400"
+                    />
+                  </div>
+                  <div>
+                    <textarea 
+                      placeholder="Answer"
+                      value={faq.answer}
+                      onChange={(e) => {
+                        const newFaqs = [...(config.faqs || [])];
+                        newFaqs[index].answer = e.target.value;
+                        setConfig({ ...config, faqs: newFaqs });
+                      }}
+                      className="w-full bg-transparent border-none focus:ring-0 text-sm text-zinc-600 p-0 placeholder:text-zinc-400 resize-none"
+                      rows={2}
+                    />
+                  </div>
+                </div>
+              ))}
+              
+              <button 
+                onClick={() => setConfig({ 
+                  ...config, 
+                  faqs: [...(config.faqs || []), { id: Date.now().toString(), question: '', answer: '' }] 
+                })}
+                className="w-full py-4 border-2 border-dashed border-zinc-200 rounded-2xl text-zinc-500 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/30 transition-all flex items-center justify-center gap-2 font-bold"
+              >
+                <Plus className="w-5 h-5" />
+                Add New FAQ
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-6">
+            <div className="flex items-center justify-between pb-6 border-b border-zinc-100">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-zinc-900">Advanced AI Tuning</h3>
+                  <p className="text-sm text-zinc-500">Fine-tune how the AI behaves and sells</p>
+                </div>
+              </div>
+              <button
+                onClick={() => handleSaveAllSettings('Advanced AI Tuning')}
+                disabled={isSaving}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {isSaving ? 'Saving...' : t('common.save')}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Upselling Focus</label>
+                <select
+                  value={config.advancedTuning?.upsellFocus || 'balanced'}
+                  onChange={(e) => setConfig({ 
+                    ...config, 
+                    advancedTuning: { 
+                      upsellFocus: e.target.value as any,
+                      strictness: config.advancedTuning?.strictness || 'high'
+                    } 
+                  })}
+                  className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all bg-white"
+                >
+                  <option value="none">None (Only answer questions)</option>
+                  <option value="soft">Soft (Suggest related items occasionally)</option>
+                  <option value="balanced">Balanced (Recommend based on context)</option>
+                  <option value="aggressive">Aggressive (Always try to upsell/cross-sell)</option>
+                </select>
+                <p className="text-xs text-zinc-500 mt-2">Controls how often the AI suggests additional products.</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Knowledge Strictness</label>
+                <select
+                  value={config.advancedTuning?.strictness || 'high'}
+                  onChange={(e) => setConfig({ 
+                    ...config, 
+                    advancedTuning: { 
+                      strictness: e.target.value as any,
+                      upsellFocus: config.advancedTuning?.upsellFocus || 'balanced'
+                    } 
+                  })}
+                  className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all bg-white"
+                >
+                  <option value="low">Low (Can use general internet knowledge)</option>
+                  <option value="medium">Medium (Prefers shop data, uses general knowledge if needed)</option>
+                  <option value="high">High (Strictly uses ONLY shop data)</option>
+                </select>
+                <p className="text-xs text-zinc-500 mt-2">Determines if the AI can talk about things outside your shop.</p>
               </div>
             </div>
           </div>

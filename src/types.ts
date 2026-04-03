@@ -26,6 +26,13 @@ export interface ShopAIConfig {
     unansweredQuestions: { id: string; question: string; timestamp: string }[];
     corrections: { id: string; originalQuery: string; aiResponse: string; correction: string; timestamp: string }[];
   };
+  // Advanced Tuning
+  advancedTuning?: {
+    upsellFocus: 'none' | 'soft' | 'balanced' | 'aggressive';
+    strictness: 'low' | 'medium' | 'high';
+  };
+  // FAQs
+  faqs?: { id: string; question: string; answer: string }[];
   // Knowledge Base
   knowledgeBase?: {
     id: string;

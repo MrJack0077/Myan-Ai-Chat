@@ -17,7 +17,8 @@ import {
   FileJson,
   Upload,
   GripVertical,
-  RefreshCw
+  RefreshCw,
+  ShieldAlert
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { 
@@ -46,6 +47,8 @@ import FAQManager from '../components/vendor/FAQManager';
 import AITraining from '../components/vendor/AITraining';
 import OrderManager from '../components/vendor/OrderManager';
 import SupportChat from '../components/common/SupportChat';
+import VendorAnalytics from '../components/vendor/VendorAnalytics';
+import CustomerManager from '../components/vendor/CustomerManager';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '../components/Toast';
 
@@ -69,7 +72,7 @@ export default function VendorDashboard() {
   const pathParts = location.pathname.split('/').filter(Boolean);
   let parsedShopId = undefined;
   if (pathParts[0] === 'vendor' && pathParts.length > 1) {
-    const knownTabs = ['orders', 'inventory', 'categories', 'ai-training', 'settings', 'analytics', 'reviews'];
+    const knownTabs = ['orders', 'inventory', 'categories', 'ai-training', 'settings', 'analytics', 'customers', 'reviews'];
     if (!knownTabs.includes(pathParts[1])) {
       parsedShopId = pathParts[1];
     }
@@ -77,7 +80,7 @@ export default function VendorDashboard() {
 
   // Determine effective shopId: URL param takes precedence for ADMINs
   const effectiveShopId = (user?.role === 'ADMIN' && parsedShopId) ? parsedShopId : user?.shopId;
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'categories' | 'settings' | 'analytics' | 'reviews' | 'ai-training' | 'orders'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'categories' | 'settings' | 'analytics' | 'customers' | 'reviews' | 'ai-training' | 'orders'>('dashboard');
   const [items, setItems] = useState<VendorItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [faqs, setFaqs] = useState<FAQ[]>([]);
@@ -225,6 +228,7 @@ export default function VendorDashboard() {
     if (path.endsWith('/inventory')) setActiveTab('inventory');
     else if (path.endsWith('/categories')) setActiveTab('categories');
     else if (path.endsWith('/analytics')) setActiveTab('analytics');
+    else if (path.endsWith('/customers')) setActiveTab('customers');
     else if (path.endsWith('/reviews')) setActiveTab('reviews');
     else if (path.endsWith('/ai-training')) setActiveTab('ai-training');
     else if (path.endsWith('/settings')) setActiveTab('settings');
@@ -504,7 +508,7 @@ export default function VendorDashboard() {
       context += `- Name: ${cfg.botName}\n`;
       context += `- Personality: ${cfg.personality}\n`;
       context += `- Tone: ${cfg.tone}\n`;
-      context += `- Language: ${cfg.responseLanguage}\n`;
+      context += `- Language: You MUST ALWAYS respond in ${cfg.responseLanguage} language. Do not use any other language.\n`;
       if (cfg.systemPrompt) context += `- System Prompt: ${cfg.systemPrompt}\n`;
       if (cfg.constraints && cfg.constraints.length > 0) {
         context += `- Constraints:\n`;
@@ -725,6 +729,54 @@ export default function VendorDashboard() {
             )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Real-time Escalation Alerts */}
+              <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-red-50 text-red-600 rounded-xl flex items-center justify-center">
+                      <ShieldAlert className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-zinc-900">Escalation Alerts</h3>
+                      <p className="text-sm text-zinc-500">AI detected customers needing human help</p>
+                    </div>
+                  </div>
+                  <span className="px-3 py-1 bg-red-100 text-red-700 text-[10px] font-bold rounded-full animate-pulse">LIVE</span>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl border border-red-100 bg-red-50/30 flex items-center justify-between group hover:bg-red-50 transition-all cursor-pointer">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-zinc-500 font-bold border border-red-100">
+                        JD
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-zinc-900">John Doe <span className="text-xs font-normal text-zinc-500 ml-2">2 mins ago</span></p>
+                        <p className="text-xs text-zinc-600 italic">"I received the wrong item, I need to speak with someone now."</p>
+                      </div>
+                    </div>
+                    <button className="p-2 bg-white text-red-600 rounded-lg border border-red-100 opacity-0 group-hover:opacity-100 transition-all shadow-sm font-bold text-xs">
+                      Respond
+                    </button>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-amber-100 bg-amber-50/30 flex items-center justify-between group hover:bg-amber-50 transition-all cursor-pointer">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-zinc-500 font-bold border border-amber-100">
+                        AS
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-zinc-900">Alice Smith <span className="text-xs font-normal text-zinc-500 ml-2">15 mins ago</span></p>
+                        <p className="text-xs text-zinc-600 italic">"Is there a discount for bulk orders? The AI couldn't confirm."</p>
+                      </div>
+                    </div>
+                    <button className="p-2 bg-white text-amber-600 rounded-lg border border-amber-100 opacity-0 group-hover:opacity-100 transition-all shadow-sm font-bold text-xs">
+                      Respond
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm">
                 <h3 className="text-lg font-bold text-zinc-900 mb-4">{t('dashboard.recent_activity')}</h3>
                 <div className="space-y-4">
@@ -1030,6 +1082,14 @@ export default function VendorDashboard() {
               <FAQManager shopId={effectiveShopId || ''} onUnsynced={markUnsynced} />
             </section>
           </div>
+        )}
+
+        {activeTab === 'analytics' && (
+          <VendorAnalytics shopId={effectiveShopId} />
+        )}
+
+        {activeTab === 'customers' && (
+          <CustomerManager shopId={effectiveShopId} />
         )}
 
         {activeTab === 'orders' && (

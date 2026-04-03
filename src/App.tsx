@@ -8,6 +8,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import VendorDashboard from './pages/VendorDashboard';
 import ShopsPage from './pages/ShopsPage';
 import SupportPage from './pages/SupportPage';
+import AutomationPage from './pages/AutomationPage';
 import OrderTracking from './pages/OrderTracking';
 import DashboardLayout from './components/DashboardLayout';
 import './i18n';
@@ -61,6 +62,7 @@ function AppRoutes() {
         <PrivateRoute allowedRoles={['ADMIN', 'VENDOR']}>
           <Routes>
             <Route path="/" element={<VendorDashboard />} />
+            <Route path="/automation" element={<AutomationPage />} />
             <Route path="/:shopId/*" element={<VendorDashboard />} />
           </Routes>
         </PrivateRoute>

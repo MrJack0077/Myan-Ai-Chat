@@ -16,6 +16,7 @@ const resources = {
         "ai_training": "AI Training",
         "shop_settings": "Shop Settings",
         "analytics": "Analytics",
+        "customers": "Customers",
         "reviews": "Reviews",
         "orders": "Orders",
         "logout": "Logout"
@@ -385,6 +386,7 @@ const resources = {
         "ai_training": "AI သင်တန်း",
         "shop_settings": "ဆိုင်ဆက်တင်များ",
         "analytics": "ခွဲခြမ်းစိတ်ဖြာချက်",
+        "customers": "ဖောက်သည်များ",
         "reviews": "သုံးသပ်ချက်များ",
         "orders": "အော်ဒါများ",
         "logout": "ထွက်ရန်"
@@ -749,8 +751,7 @@ i18n
   .use(initReactI18next)
   .init({
     resources,
-    fallbackLng: 'mm',
-    lng: 'mm', // Default language
+    fallbackLng: 'en',
     interpolation: {
       escapeValue: false
     }

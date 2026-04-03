@@ -132,31 +132,58 @@ export const deleteShop = async (shopId: string) => {
  * Clears both the Firestore semantic_cache subcollection and the external API cache for a shop.
  * Call this whenever shop data (products, services, settings, AI config, etc.) is updated.
  */
-export const clearShopCache = async (shopId: string) => {
+export const clearShopCache = async (shopId: string, specificKeyword?: string) => {
   try {
-    console.log(`[clearShopCache] Starting cache clear for shop: ${shopId}`);
+    console.log(`[clearShopCache] Starting cache clear for shop: ${shopId}${specificKeyword ? ` (Keyword: ${specificKeyword})` : ''}`);
     
     // 1. Clear semantic_cache subcollection
     const cacheCollectionRef = collection(db, 'shops', shopId, 'semantic_cache');
     const cacheSnapshot = await getDocs(cacheCollectionRef);
     
     if (!cacheSnapshot.empty) {
-      const batch = writeBatch(db);
-      cacheSnapshot.forEach((docSnap) => {
-        batch.delete(docSnap.ref);
-      });
-      await batch.commit();
-      console.log(`[clearShopCache] Deleted ${cacheSnapshot.size} documents from semantic_cache`);
-    }
+      let docsToDelete = cacheSnapshot.docs;
+      
+      if (specificKeyword) {
+        const keyword = specificKeyword.toLowerCase();
+        docsToDelete = docsToDelete.filter(doc => {
+          const data = doc.data();
+          const query = (data.query || '').toLowerCase();
+          const reply = (data.reply || '').toLowerCase();
+          return query.includes(keyword) || reply.includes(keyword);
+        });
+      }
 
+      if (docsToDelete.length > 0) {
+        // Firestore batch limit is 500 operations
+        for (let i = 0; i < docsToDelete.length; i += 500) {
+          const batch = writeBatch(db);
+          const chunk = docsToDelete.slice(i, i + 500);
+          chunk.forEach((docSnap) => {
+            batch.delete(docSnap.ref);
+          });
+          await batch.commit();
+        }
+        console.log(`[clearShopCache] Deleted ${docsToDelete.length} documents from semantic_cache`);
+      } else {
+        console.log(`[clearShopCache] No matching cache documents found for keyword: ${specificKeyword}`);
+      }
+    }
+  } catch (error) {
+    console.error(`[clearShopCache] Error clearing Firestore cache for ${shopId}:`, error);
+    // Continue to API call even if Firestore fails to ensure AI reloads config
+  }
+
+  try {
     // 2. Call external API to clear backend cache
-    await fetch(`https://allchat.ddnsfree.com/api/clear-cache/${shopId}`, {
+    // Adding a timestamp to prevent any intermediate network caching
+    const apiUrl = import.meta.env.VITE_API_URL || 'https://allchat.ddnsfree.com';
+    await fetch(`${apiUrl}/api/clear-cache/${shopId}?t=${Date.now()}`, {
       method: 'GET',
       mode: 'no-cors'
     });
     console.log(`[clearShopCache] External API cache clear triggered for ${shopId}`);
   } catch (error) {
-    console.error(`[clearShopCache] Error clearing cache for ${shopId}:`, error);
+    console.error(`[clearShopCache] Error triggering external API cache clear for ${shopId}:`, error);
   }
 };
 
@@ -186,7 +213,11 @@ export const updateShopSettings = async (
     await updateDoc(shopRef, updatedData);
     console.log(`[updateShopSettings] Successfully updated shop document for ${shopId}`);
 
-    // Step 2: If currency changed, reindex inventory in the background so AI embeddings use the new currency
+    // Step 2: Clear AI Cache automatically whenever settings change
+    // This ensures that changes to policies, delivery info, or AI config are reflected live
+    await clearShopCache(shopId);
+
+    // Step 3: If currency changed, reindex inventory in the background so AI embeddings use the new currency
     if (updatedData.currency && updatedData.currency !== oldCurrency) {
       console.log(`[updateShopSettings] Currency changed from ${oldCurrency} to ${updatedData.currency}. Reindexing inventory...`);
       reindexShopInventory(shopId).catch(err => console.error('Failed to reindex inventory after currency change:', err));
@@ -206,6 +237,7 @@ export const updateShopSettings = async (
 export const updateShopAIConfig = async (shopId: string, config: ShopAIConfig) => {
   const docRef = doc(db, 'shops', shopId);
   await setDoc(docRef, { aiConfig: config }, { merge: true });
+  await clearShopCache(shopId);
 };
 
 // Helper for generating document IDs from names
@@ -275,6 +307,10 @@ export const saveItem = async (shopId: string, item: Partial<VendorItem>, skipCa
   }
 
   await setDoc(docRef, finalItem, { merge: true });
+
+  if (!skipCacheClear) {
+    await clearShopCache(shopId, finalItem.name).catch(err => console.error('Failed to clear cache after saving item:', err));
+  }
 
   return itemId;
 };
@@ -374,7 +410,13 @@ export const deleteItem = async (shopId: string, itemId: string) => {
   const path = `shops/${shopId}/items/${itemId}`;
   try {
     const docRef = doc(db, 'shops', shopId, 'items', itemId);
+    const docSnap = await getDoc(docRef);
+    let itemName = '';
+    if (docSnap.exists()) {
+      itemName = docSnap.data().name || '';
+    }
     await deleteDoc(docRef);
+    await clearShopCache(shopId, itemName).catch(err => console.error('Failed to clear cache after deleting item:', err));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }
