@@ -278,16 +278,31 @@ export const saveItem = async (shopId: string, item: Partial<VendorItem>, skipCa
 
   // Prepare item data for embedding
   const status = (item.is_available && (item.stock_quantity || 0) > 0) ? "Available" : "Out of Stock";
-  const textToEmbed = `Product: ${item.name || ''}. Price: ${item.price || 0} ${shopCurrency}. Status: ${status}. Description: ${item.description || ''}.`.trim();
+  const textToEmbed = `
+    Product: ${item.name || ''}
+    Brand: ${item.brand || ''}
+    Category: ${item.category || ''}
+    Price: ${item.price || 0} ${shopCurrency}
+    Status: ${status}
+    Description: ${item.description || ''}
+    Specifications: ${item.specifications || ''}
+    Marketing/AI Description: ${item.ai_custom_description || ''}
+    Keywords: ${item.ai_keywords || ''}
+    Usage Instructions: ${item.usage_instructions || ''}
+    Target Audience: ${item.target_audience || ''}
+  `.trim();
 
-  let embedding: number[] | undefined = item.embedding && item.embedding.length > 0 ? item.embedding : undefined;
+  // Always regenerate embedding if we are saving/updating to ensure it captures all rich text
+  let embedding: number[] | undefined = undefined;
   
   try {
-    if (!embedding && textToEmbed.length > 5) {
+    if (textToEmbed.length > 5) {
       embedding = await generateEmbedding(textToEmbed);
     }
   } catch (error) {
     console.error('Failed to generate embedding for item:', error);
+    // Fallback to existing embedding if generation fails
+    embedding = item.embedding && item.embedding.length > 0 ? item.embedding : undefined;
   }
 
   // Determine the document ID

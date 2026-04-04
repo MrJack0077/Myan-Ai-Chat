@@ -71,7 +71,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: t('nav.categories'), path: effectiveShopId ? `/vendor/${effectiveShopId}/categories` : '/vendor/categories', icon: Layers },
     { name: t('nav.analytics'), path: effectiveShopId ? `/vendor/${effectiveShopId}/analytics` : '/vendor/analytics', icon: BarChart2 },
     { name: t('nav.ai_training'), path: effectiveShopId ? `/vendor/${effectiveShopId}/ai-training` : '/vendor/ai-training', icon: Bot },
-    { name: 'Automation', path: '/vendor/automation', icon: Zap },
     { name: t('nav.shop_settings'), path: effectiveShopId ? `/vendor/${effectiveShopId}/settings` : '/vendor/settings', icon: Settings },
   ];
 

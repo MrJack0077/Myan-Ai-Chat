@@ -481,8 +481,47 @@ async def process_core_logic(data):
                     try: stock = int(d.get('stock_quantity') or 0)
                     except: stock = 0
                     status = "OUT OF STOCK" if stock <= 0 else f"In Stock ({stock})"
-                    res_list.append(f"📦 Name: {d.get('name')} | Price: {d.get('price')} {currency} | Status: {status}")
-                tool_info = "Database Results:\n" + "\n".join(res_list)
+                    
+                    item_str = f"📦 Name: {d.get('name')} | Price: {d.get('price')} {currency} | Status: {status}"
+                    
+                    # Inject brand and category
+                    brand = d.get('brand', '')
+                    category = d.get('category', '')
+                    if brand or category:
+                        item_str += f"\n   - Brand/Category: {brand} / {category}"
+                        
+                    # Inject Sub-items (Variants like Color/Size)
+                    sub_items = d.get('sub_items', [])
+                    if isinstance(sub_items, list) and len(sub_items) > 0:
+                        variant_list = []
+                        for sub in sub_items:
+                            sub_name = sub.get('name', 'Unknown')
+                            sub_stock = int(sub.get('stock_quantity') or 0)
+                            sub_status = "Out of Stock" if sub_stock <= 0 else f"In Stock ({sub_stock})"
+                            variant_list.append(f"{sub_name} ({sub_status})")
+                        item_str += f"\n   - Available Variants: {', '.join(variant_list)}"
+                    
+                    # Inject rich product data for AI
+                    ai_desc = d.get('ai_custom_description', '')
+                    desc = d.get('description', '')
+                    specs = d.get('specifications', '')
+                    usage = d.get('usage_instructions', '')
+                    target = d.get('target_audience', '')
+                    warranty = d.get('warranty_info', '')
+                    return_policy = d.get('return_policy', '')
+                    shipping = d.get('shipping_info', '')
+                    
+                    if ai_desc: item_str += f"\n   - Marketing/AI Desc: {ai_desc}"
+                    elif desc: item_str += f"\n   - Description: {desc}"
+                    if specs: item_str += f"\n   - Specifications: {specs}"
+                    if usage: item_str += f"\n   - Usage Instructions: {usage}"
+                    if target: item_str += f"\n   - Target Audience: {target}"
+                    if warranty: item_str += f"\n   - Warranty: {warranty}"
+                    if return_policy: item_str += f"\n   - Return Policy: {return_policy}"
+                    if shipping: item_str += f"\n   - Shipping Info: {shipping}"
+                    
+                    res_list.append(item_str)
+                tool_info = "Database Results:\n" + "\n\n".join(res_list)
                 
             # Upgrade 2: Semantic Vector Memory (Search past interactions)
             recalled_memory = ""
