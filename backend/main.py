@@ -8,6 +8,8 @@ from api.routes import webhook, shops, cache, cron, products
 
 load_dotenv()
 
+print("👋 hi from Myan-Ai-Chat backend!", flush=True)
+
 app = FastAPI()
 
 app.add_middleware(
