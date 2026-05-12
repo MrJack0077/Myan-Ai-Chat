@@ -219,18 +219,25 @@ async def process_core_logic(data):
     is_likely_greeting = len(user_msg) <= 50 and not media_parts and not attachments
     
     if is_likely_greeting:
-        # Start research in parallel — if not a greeting, results will be ready
-        research_task = asyncio.create_task(run_embedding_search(user_msg, shop_doc_id, currency))
-        
-        greeting_context = chat_history
-        if re_engage_note:
-            greeting_context = f"[Context for AI]\n{re_engage_note}\n\n{chat_history}"
-        handled = await run_greeting_router(user_msg, greeting_context, ai_config, shop_doc_id, conv_id, acc_id, user_id, token, lang)
-        if handled:
-            # Cancel research — it was a greeting, don't need product data
-            research_task.cancel()
-            return
-        # Not a greeting — research is likely already done (parallel)
+        # PRE-CHECK: Run keyword classifier first (~0ms) to skip AI greeting router
+        kw_intent, kw_skip = fast_intent_classify(user_msg, order_state)
+        if kw_skip and kw_intent not in ("GREETING",):
+            # Keyword classifier says this is a domain request — skip the AI greeting router
+            print(f"⚡ Greeting Router: SKIP (keyword={kw_intent})", flush=True)
+            is_likely_greeting = False
+        else:
+            # Start research in parallel — if not a greeting, results will be ready
+            research_task = asyncio.create_task(run_embedding_search(user_msg, shop_doc_id, currency))
+            
+            greeting_context = chat_history
+            if re_engage_note:
+                greeting_context = f"[Context for AI]\n{re_engage_note}\n\n{chat_history}"
+            handled = await run_greeting_router(user_msg, greeting_context, ai_config, shop_doc_id, conv_id, acc_id, user_id, token, lang)
+            if handled:
+                # Cancel research — it was a greeting, don't need product data
+                research_task.cancel()
+                return
+            # Not a greeting — research is likely already done (parallel)
     else:
         print(f"🚦 Greeting Router: SKIP (msg_len={len(user_msg)}, media={bool(media_parts)})", flush=True)
 
