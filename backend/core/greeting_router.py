@@ -2,7 +2,6 @@
 import json
 import time
 import random
-import asyncio
 import google.generativeai as genai
 from utils import add_to_history, increment_shop_tokens, send_sendpulse_messages, FAST_MODEL_NAME, BASE_MODEL_NAME
 from core.prompt_builder import resolve_style, INTENT_GUIDELINES
@@ -41,12 +40,9 @@ JSON only: {{"intent": "GREETING" | "DOMAIN_REQUEST", "reply": "reply if GREETIN
 
     try:
         router_model = genai.GenerativeModel(FAST_MODEL_NAME)
-        router_res = await asyncio.wait_for(
-            router_model.generate_content_async(
-                contents=[router_sys, f"User: {user_msg}"],
-                generation_config=genai.GenerationConfig(response_mime_type="application/json", temperature=0.1),
-            ),
-            timeout=8.0  # Max 8s for greeting classification
+        router_res = await router_model.generate_content_async(
+            contents=[router_sys, f"User: {user_msg}"],
+            generation_config=genai.GenerationConfig(response_mime_type="application/json", temperature=0.1),
         )
         router_data = json.loads(router_res.text.strip())
         print(f"🚦 Router: intent={router_data.get('intent')} | took={time.time() - router_start:.2f}s")

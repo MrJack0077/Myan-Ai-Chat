@@ -218,23 +218,19 @@ async def process_core_logic(data):
     is_likely_greeting = len(user_msg) <= 50 and not media_parts and not attachments
     
     if is_likely_greeting:
-        kw_intent, kw_skip = fast_intent_classify(user_msg, order_state)
-        if kw_intent and kw_intent not in ("GREETING",):
-            print(f"⚡ Greeting Router: SKIP (keyword={kw_intent})", flush=True)
-            is_likely_greeting = False
-        else:
-            research_task = asyncio.create_task(run_embedding_search(user_msg, shop_doc_id, currency))
-            
-            greeting_context = chat_history
-            if re_engage_note:
-                greeting_context = f"[Context for AI]\n{re_engage_note}\n\n{chat_history}"
-            t_greet = time.time()
-            handled = await run_greeting_router(user_msg, greeting_context, ai_config, shop_doc_id, conv_id, acc_id, user_id, token, lang)
-            print(f"⏱️  [4] Greeting Router AI call: {(time.time()-t_greet):.2f}s", flush=True)
-            if handled:
-                research_task.cancel()
-                print(f"⏱️  [TOTAL] Pipeline: {(time.time()-t_start):.2f}s (greeting)", flush=True)
-                return
+        # Start research in parallel — if not a greeting, results will be ready
+        research_task = asyncio.create_task(run_embedding_search(user_msg, shop_doc_id, currency))
+        
+        greeting_context = chat_history
+        if re_engage_note:
+            greeting_context = f"[Context for AI]\n{re_engage_note}\n\n{chat_history}"
+        t_greet = time.time()
+        handled = await run_greeting_router(user_msg, greeting_context, ai_config, shop_doc_id, conv_id, acc_id, user_id, token, lang)
+        print(f"⏱️  [4] Greeting Router AI call: {(time.time()-t_greet):.2f}s", flush=True)
+        if handled:
+            research_task.cancel()
+            print(f"⏱️  [TOTAL] Pipeline: {(time.time()-t_start):.2f}s (greeting)", flush=True)
+            return
     else:
         print(f"🚦 Greeting Router: SKIP (msg_len={len(user_msg)}, media={bool(media_parts)})", flush=True)
 
@@ -256,30 +252,26 @@ async def process_core_logic(data):
         research_task = run_embedding_search(user_msg, shop_doc_id, currency)
         research_result = await research_task
     
-    # If keyword classifier detected ANY intent, skip the slow Automation Agent AI call
-    # Only call automation agent for truly ambiguous messages (no keyword match)
+    # SKIP Automation Agent entirely — keyword classifier handles intent (0ms)
+    # Let the main agent (product/order/media) handle the actual reply generation
+    # This saves 6-15s per message by eliminating 1 AI call
     if fast_intent and fast_intent not in ("COMPLAINT_OR_HUMAN",):
         print(f"⚡ SMART SKIP: fast_intent={fast_intent} — skipping Automation Agent", flush=True)
-        tool_info, msg_emb = research_result
-        automation_data = {
-            "intent": fast_intent,
-            "is_complex": False,
-            "reply": "",
-            "extracted_preferences": {},
-            "behavioral_tags": [],
-            "prompt_tokens": 0,
-            "candidate_tokens": 0,
-        }
     else:
-        tool_info, msg_emb = research_result
-        t_auto = time.time()
-        automation_result = await run_automation_agent(
-            user_msg, media_parts, chat_history, prof, ai_config, shop_info_data,
-            FAST_MODEL_NAME, shop_doc_id=shop_doc_id, tool_info=tool_info
-        )
-        print(f"⏱️  [5] Automation Agent AI call: {(time.time()-t_auto):.2f}s", flush=True)
-        automation_data = automation_result if (automation_result is not None and not isinstance(automation_result, Exception)) else {}
+        # No keyword match → default to PRODUCT_INQUIRY, let product agent handle it
+        fast_intent = "PRODUCT_INQUIRY"
+        print(f"⚡ SMART SKIP: no keyword → default={fast_intent} — skipping Automation Agent", flush=True)
+    
     tool_info, msg_emb = research_result
+    automation_data = {
+        "intent": fast_intent,
+        "is_complex": False,
+        "reply": "",
+        "extracted_preferences": {},
+        "behavioral_tags": [],
+        "prompt_tokens": 0,
+        "candidate_tokens": 0,
+    }
 
     intent_type = automation_data.get("intent", "PRODUCT_INQUIRY")
     is_complex = automation_data.get("is_complex", False)
