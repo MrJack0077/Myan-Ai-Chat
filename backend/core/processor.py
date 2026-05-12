@@ -256,7 +256,9 @@ async def process_core_logic(data):
         research_task = run_embedding_search(user_msg, shop_doc_id, currency)
         research_result = await research_task
     
-    if skip_automation and fast_intent and fast_intent not in ("COMPLAINT_OR_HUMAN", "START_ORDER", "ORDER"):
+    # If keyword classifier detected ANY intent, skip the slow Automation Agent AI call
+    # Only call automation agent for truly ambiguous messages (no keyword match)
+    if fast_intent and fast_intent not in ("COMPLAINT_OR_HUMAN",):
         print(f"⚡ SMART SKIP: fast_intent={fast_intent} — skipping Automation Agent", flush=True)
         tool_info, msg_emb = research_result
         automation_data = {
