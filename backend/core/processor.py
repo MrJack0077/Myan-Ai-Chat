@@ -219,7 +219,7 @@ async def process_core_logic(data):
     
     if is_likely_greeting:
         kw_intent, kw_skip = fast_intent_classify(user_msg, order_state)
-        if kw_skip and kw_intent not in ("GREETING",):
+        if kw_intent and kw_intent not in ("GREETING",):
             print(f"⚡ Greeting Router: SKIP (keyword={kw_intent})", flush=True)
             is_likely_greeting = False
         else:
