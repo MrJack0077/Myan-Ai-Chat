@@ -91,8 +91,8 @@ def _calculate_typing_delay(reply_text: str) -> float:
     variation = random.uniform(-0.2, 0.3) * base_delay
     delay = base_delay + variation
     
-    # Apply limits
-    delay = max(0.5, min(delay, 3.0))
+    # Apply limits (1.5s max for fast replies)
+    delay = max(0.5, min(delay, 1.5))
     return round(delay, 2)
 
 
