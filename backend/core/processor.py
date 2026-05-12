@@ -101,6 +101,8 @@ def _calculate_typing_delay(reply_text: str) -> float:
 # ---------------------------------------------------------------------------
 
 async def process_core_logic(data):
+    t_start = time.time()
+    
     # ── Admin feedback path ──
     if data.get("type") == "admin_feedback":
         return await _handle_admin_feedback(data)
@@ -116,7 +118,6 @@ async def process_core_logic(data):
         user_msg = data.get("text", "").strip()
 
     if not user_msg and not attachments:
-        # print("ℹ️ Nothing to process in this payload.")
         return  # Nothing to process
 
     if not acc_id or not user_id:
@@ -124,8 +125,9 @@ async def process_core_logic(data):
         return
 
     print(f"\n📩 process_core_logic START for {user_id} | msg: '{user_msg[:60]}...'", flush=True)
+    t1 = time.time()
 
-    # ── Per-user sequential lock: prevent race conditions when split messages arrive ──
+    # ── Per-user sequential lock ──
     lock_acquired = await _acquire_user_lock(user_id)
     if not lock_acquired:
         print(f"⏳ User {user_id[:20]}... locked, re-queuing...", flush=True)
@@ -151,12 +153,13 @@ async def process_core_logic(data):
     if not token:
         print(f"❌ Token failed for bot: {acc_id}", flush=True)
         return
+    print(f"⏱️  [1] Shop+Token loaded: {(time.time()-t1):.2f}s", flush=True)
+    t2 = time.time()
 
     # ── 3. Load Profile + Segment ──
     prof = await get_user_profile(shop_doc_id, user_id)
     segment_customer(prof)
     
-    # ── Re-engagement context: If returning customer with past purchases, build context ──
     past_purchases = prof.get("sales_data", {}).get("past_purchases", [])
     re_engage_note = ""
     if past_purchases and prof["dynamics"].get("message_count", 0) <= 2:
@@ -166,7 +169,6 @@ async def process_core_logic(data):
             total = last_purchase.get("total_price", 0)
             re_engage_note = f"Returning customer! Previously bought: {', '.join(items[:3])} for {total} MMK. Welcome them back warmly if they seem to be browsing again."
     
-    # Sync identification if needed
     if not prof["identification"].get("messenger_id") and "ps_" in user_id:
         prof["identification"]["messenger_id"] = user_id
     elif not prof["identification"].get("telegram_id") and "tg_" in user_id:
@@ -174,17 +176,15 @@ async def process_core_logic(data):
 
     order_state = prof["dynamics"].get("order_state", "NONE")
 
-    # ── Check if handover is active (admin is handling this customer) ──
     if order_state == "HUMAN_HANDOVER":
         print(f"⏸️ Handover active for {user_id}, skipping AI — admin is handling", flush=True)
         return
 
-    # Expire stale order state
     order_state = await expire_order_state(prof, shop_doc_id, user_id)
-
-    # Increment message count
     prof["dynamics"]["message_count"] = prof["dynamics"].get("message_count", 0) + 1
     prof["dynamics"]["last_interaction"] = datetime.now(timezone.utc).isoformat()
+    print(f"⏱️  [2] Profile loaded: {(time.time()-t2):.2f}s", flush=True)
+    t3 = time.time()
 
     # ── 4. Shop config ──
     ai_config = clean_large_strings(shop.get('ai_config', {}))
@@ -196,7 +196,6 @@ async def process_core_logic(data):
     lang = ai_config.get('responseLanguage', 'Myanmar')
     agent_id = shop.get('agentId')
 
-    # ── /refresh command ──
     if user_msg.strip().lower() == "/refresh":
         await _handle_refresh(acc_id, shop_doc_id)
         return
@@ -211,59 +210,52 @@ async def process_core_logic(data):
     hist_msg = user_msg if user_msg else ("[Voice Message]" if any("audio" in p.get("mime_type","") for p in media_parts) else ("[Photo]" if media_parts else "[Voice/Image/Payload]"))
     await add_to_history(shop_doc_id, conv_id, "Customer", hist_msg, max_len=10)
     chat_history = await get_history(shop_doc_id, conv_id)
+    print(f"⏱️  [3] Config+Typing+History: {(time.time()-t3):.2f}s", flush=True)
+    t4 = time.time()
 
     # ── 8. Fast Greeting Router ──
-    # OPTIMIZATION: Skip greeting router for messages clearly not greetings.
-    # Long messages (>50 chars), messages with attachments/media are never pure greetings.
-    # For short messages: start research in parallel so it's ready if not a greeting.
     is_likely_greeting = len(user_msg) <= 50 and not media_parts and not attachments
     
     if is_likely_greeting:
-        # PRE-CHECK: Run keyword classifier first (~0ms) to skip AI greeting router
         kw_intent, kw_skip = fast_intent_classify(user_msg, order_state)
         if kw_skip and kw_intent not in ("GREETING",):
-            # Keyword classifier says this is a domain request — skip the AI greeting router
             print(f"⚡ Greeting Router: SKIP (keyword={kw_intent})", flush=True)
             is_likely_greeting = False
         else:
-            # Start research in parallel — if not a greeting, results will be ready
             research_task = asyncio.create_task(run_embedding_search(user_msg, shop_doc_id, currency))
             
             greeting_context = chat_history
             if re_engage_note:
                 greeting_context = f"[Context for AI]\n{re_engage_note}\n\n{chat_history}"
+            t_greet = time.time()
             handled = await run_greeting_router(user_msg, greeting_context, ai_config, shop_doc_id, conv_id, acc_id, user_id, token, lang)
+            print(f"⏱️  [4] Greeting Router AI call: {(time.time()-t_greet):.2f}s", flush=True)
             if handled:
-                # Cancel research — it was a greeting, don't need product data
                 research_task.cancel()
+                print(f"⏱️  [TOTAL] Pipeline: {(time.time()-t_start):.2f}s (greeting)", flush=True)
                 return
-            # Not a greeting — research is likely already done (parallel)
     else:
         print(f"🚦 Greeting Router: SKIP (msg_len={len(user_msg)}, media={bool(media_parts)})", flush=True)
 
-    # Refresh history after potential update
     chat_history = await get_history(shop_doc_id, conv_id)
+    print(f"⏱️  [4] Greeting Router done: {(time.time()-t4):.2f}s", flush=True)
+    t5 = time.time()
 
     # ── 9. Smart Intent Classify + Research ──
-    # Step A: Fast keyword-based intent classification (0ms, no AI call)
     fast_intent, skip_automation = fast_intent_classify(user_msg, order_state)
     
-    # Step B: Get research results (already started in parallel above, or start now)
     if is_likely_greeting:
-        # Research was started in parallel — await it now
         try:
             research_result = await research_task
         except asyncio.CancelledError:
-            return  # Should not happen (handled greeting case returned early)
+            return
         except Exception:
             research_result = ("No items", None)
     else:
-        # Long message — start research now
         research_task = run_embedding_search(user_msg, shop_doc_id, currency)
         research_result = await research_task
     
     if skip_automation and fast_intent and fast_intent not in ("COMPLAINT_OR_HUMAN", "START_ORDER", "ORDER"):
-        # ── SMART SKIP: Intent is clear from keywords → skip Automation Agent ──
         print(f"⚡ SMART SKIP: fast_intent={fast_intent} — skipping Automation Agent", flush=True)
         tool_info, msg_emb = research_result
         automation_data = {
@@ -277,16 +269,20 @@ async def process_core_logic(data):
         }
     else:
         tool_info, msg_emb = research_result
+        t_auto = time.time()
         automation_result = await run_automation_agent(
             user_msg, media_parts, chat_history, prof, ai_config, shop_info_data,
             FAST_MODEL_NAME, shop_doc_id=shop_doc_id, tool_info=tool_info
         )
+        print(f"⏱️  [5] Automation Agent AI call: {(time.time()-t_auto):.2f}s", flush=True)
         automation_data = automation_result if (automation_result is not None and not isinstance(automation_result, Exception)) else {}
     tool_info, msg_emb = research_result
 
     intent_type = automation_data.get("intent", "PRODUCT_INQUIRY")
     is_complex = automation_data.get("is_complex", False)
     reply_text = automation_data.get("reply", "")
+    print(f"⏱️  [5] Intent+Research+Automation: {(time.time()-t5):.2f}s | intent={intent_type}", flush=True)
+    t6 = time.time()
 
     # ── 10. Semantic Cache ──
     cached_reply = await check_semantic_cache(shop_doc_id, user_msg, msg_emb, intent_type, order_state, acc_id)
@@ -338,6 +334,7 @@ async def process_core_logic(data):
         }
         total_tokens = final_data["prompt_tokens"] + final_data["candidate_tokens"]
     else:
+        t_agent = time.time()
         final_data, total_tokens = await route_to_agent(
             order_state, prof, user_msg, ai_config, chat_history,
             media_parts, tool_info, currency, policies,
@@ -347,6 +344,7 @@ async def process_core_logic(data):
         )
         reply_text = final_data.get("reply", "...")
         is_complex = final_data.get("is_complex", False)
+        print(f"⏱️  [6] Agent Routing (product/order/media): {(time.time()-t_agent):.2f}s", flush=True)
 
     # ── 14. Response & Save ──
     await add_to_history(shop_doc_id, conv_id, "AI", reply_text, max_len=10)
@@ -381,6 +379,8 @@ async def process_core_logic(data):
     
     # Release per-user sequential lock
     await _release_user_lock(user_id)
+    
+    print(f"⏱️  [TOTAL] Pipeline complete: {(time.time()-t_start):.2f}s | reply: '{reply_text[:50]}...'", flush=True)
 
 
 # ── End of process_core_logic pipeline ──
