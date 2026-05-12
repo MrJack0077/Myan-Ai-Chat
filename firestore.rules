@@ -1,0 +1,148 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Global Helper Functions
+    // ===============================================================
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN' ||
+          (request.auth.token.email == "admin@gmail.com") ||
+          (request.auth.token.email == "luckydvservice@gmail.com"));
+    }
+
+    function isVendorForShop(shopId) {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.shopId == shopId;
+    }
+
+    // ===============================================================
+    // Shared Data Blueprint Validations
+    // ===============================================================
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.size() >= 10 && dateStr.size() <= 40;
+    }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // ===============================================================
+    // Catch-All Default Deny
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Users
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isSignedIn() && (isOwner(userId) || isAdmin()) &&
+                    incoming().email is string &&
+                    incoming().role in ['ADMIN', 'VENDOR'];
+      allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // ===============================================================
+    // Shops
+    // ===============================================================
+    match /shops/{shopId} {
+      allow read: if true; // Public can see active shop settings
+      
+      allow create: if isAdmin() && 
+                    incoming().name is string && incoming().name.size() > 0 &&
+                    incoming().slug is string && incoming().slug.size() > 0;
+      
+      allow update: if isAdmin() || isVendorForShop(shopId);
+      
+      allow delete: if isAdmin();
+
+      // ---- Shop Items ----
+      match /items/{itemId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin() || isVendorForShop(shopId);
+      }
+
+      // ---- Shop Categories ----
+      match /categories/{categoryId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin() || isVendorForShop(shopId);
+      }
+
+      // ---- Shop FAQs ----
+      match /faqs/{faqId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin() || isVendorForShop(shopId);
+      }
+
+      // ---- Shop Orders ----
+      match /orders/{orderId} {
+        allow read, list: if isVendorForShop(shopId) || isAdmin() || 
+                             (request.auth == null && resource != null);
+        allow create: if true; 
+        allow update: if isVendorForShop(shopId) || isAdmin();
+        allow delete: if isAdmin() || isVendorForShop(shopId);
+      }
+
+      // ---- Shop Semantic Cache ----
+      match /semantic_cache/{cacheId} {
+        allow read: if isVendorForShop(shopId) || isAdmin();
+        allow create, update, delete: if isVendorForShop(shopId) || isAdmin();
+      }
+    }
+
+    // ===============================================================
+    // Global Orders (Legacy path if used)
+    // ===============================================================
+    match /orders/{orderId} {
+      allow read: if true; 
+      allow create: if true;
+      allow update, delete: if isAdmin() || (isSignedIn() && existing().shopId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.shopId);
+    }
+
+    // ===============================================================
+    // Bot Users
+    // ===============================================================
+    match /bot_users/{userId} {
+      // Must filter by shopId!
+      allow read: if isAdmin() || (isSignedIn() && resource.data.shopId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.shopId);
+      
+      allow list: if isAdmin() || (isSignedIn() && resource.data.shopId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.shopId);
+
+      allow create, update: if isAdmin() || (isSignedIn() && incoming().shopId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.shopId);
+      allow delete: if isAdmin() || (isSignedIn() && existing().shopId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.shopId);
+    }
+
+    // ===============================================================
+    // Support Sessions & Chats
+    // ===============================================================
+    match /support_sessions/{sessionId} {
+      // sessionId is usually the shopId
+      allow read, list: if isAdmin() || isVendorForShop(sessionId);
+      allow create, update: if isAdmin() || isVendorForShop(sessionId);
+      allow delete: if isAdmin();
+    }
+
+    match /support_chats/{sessionId}/messages/{messageId} {
+      allow read, list: if isAdmin() || isVendorForShop(sessionId);
+      allow create, update: if isAdmin() || isVendorForShop(sessionId);
+      allow delete: if isAdmin();
+    }
+  }
+}

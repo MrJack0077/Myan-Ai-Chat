@@ -1,0 +1,8 @@
+{
+  "name": "MyanSocial Admin",
+  "description": "Admin dashboard for MyanSocial Shop and Chatbot Management (admin.myansocial.shop)",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
