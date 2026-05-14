@@ -3,8 +3,8 @@ module.exports = {
     {
       name: 'backend-ai',
       script: 'main.py',
-      interpreter: '/home/tirus/Work/Real Myan Social/backend/venv/bin/python3',
-      cwd: '/home/tirus/Work/Real Myan Social/backend',
+      interpreter: './venv/bin/python3',
+      cwd: '.',
       
       autorestart: true,
       max_restarts: 10,
@@ -27,8 +27,8 @@ module.exports = {
     {
       name: 'frontend',
       script: 'server.ts',
-      interpreter: '/home/tirus/Work/Real Myan Social/node_modules/.bin/tsx',
-      cwd: '/home/tirus/Work/Real Myan Social',
+      interpreter: '../node_modules/.bin/tsx',
+      cwd: '..',
       
       autorestart: true,
       max_restarts: 10,
