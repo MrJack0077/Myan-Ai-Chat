@@ -188,32 +188,22 @@ export const updateShopAIConfig = async (shopId: string, config: ShopAIConfig) =
   }
 };
 
-export const generateEmbedding = async (text: string, retries = 5, delay = 5000): Promise<number[]> => {
-  const geminiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-  if (!geminiKey) {
-    console.warn('[generateEmbedding] No GEMINI API key found');
-    throw new Error('GEMINI_API_KEY not configured');
-  }
-  const ai = new GoogleGenAI({ apiKey: geminiKey });
+export const generateEmbedding = async (text: string): Promise<number[]> => {
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   try {
-    const result = await ai.models.embedContent({
-      model: 'gemini-embedding-2-preview',
-      contents: [text],
-      config: { outputDimensionality: 768 }
+    const res = await fetch(`${apiUrl}/api/embed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
     });
-
-    if (!result.embeddings || result.embeddings.length === 0) throw new Error('Failed to generate embedding');
-    let embeddingArray = result.embeddings[0].values;
-    if (!embeddingArray) throw new Error('Embedding values are undefined');
-    if (embeddingArray.length > 768) embeddingArray = embeddingArray.slice(0, 768);
-
-    return embeddingArray;
-  } catch (error: any) {
-    const errorStr = error?.message || (typeof error === 'string' ? error : JSON.stringify(error));
-    if (retries > 0 && (errorStr.includes('Quota exceeded') || errorStr.includes('429') || error?.status === 429)) {
-      await new Promise(resolve => setTimeout(resolve, delay));
-      return generateEmbedding(text, retries - 1, delay * 2);
+    const data = await res.json();
+    if (data.status === 'success' && data.embedding) {
+      console.log(`✅ Embedding via ${data.provider}: ${data.embedding.length} dims`);
+      return data.embedding;
     }
+    throw new Error(data.message || 'Embedding failed');
+  } catch (error: any) {
+    console.error('[generateEmbedding] Failed:', error?.message || error);
     throw error;
   }
 };

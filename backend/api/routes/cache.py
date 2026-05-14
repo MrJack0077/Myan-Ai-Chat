@@ -1,9 +1,37 @@
 import asyncio
 from fastapi import APIRouter
 from pydantic import BaseModel
-from utils import db, r
+from utils import db, r, EMBEDDING_MODEL_NAME
+import google.generativeai as genai
 
 router = APIRouter(prefix="/api", tags=["Cache"])
+
+class EmbedRequest(BaseModel):
+    text: str
+
+@router.post("/embed")
+async def embed_text(req: EmbedRequest):
+    """Generate embedding for product text via Vertex AI + AI Studio fallback."""
+    if not req.text.strip():
+        return {"status": "error", "message": "Empty text"}
+    try:
+        # Try Vertex AI first
+        try:
+            from vertexai.language_models import TextEmbeddingModel
+            emb_model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL_NAME)
+            embeddings = emb_model.get_embeddings([req.text])
+            if embeddings and embeddings[0].values:
+                return {"status": "success", "embedding": list(embeddings[0].values), "provider": "vertex"}
+        except Exception:
+            pass
+        # Fallback to AI Studio
+        emb_res = await genai.embed_content_async(
+            model=EMBEDDING_MODEL_NAME, content=req.text,
+            task_type='retrieval_document', output_dimensionality=768,
+        )
+        return {"status": "success", "embedding": emb_res['embedding'], "provider": "studio"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 class CleanHistoryOptions(BaseModel):
     redis: bool = False
