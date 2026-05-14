@@ -60,7 +60,7 @@ def check_token_reset(shop_data: dict) -> dict:
     
     if reset_date_str:
         try:
-            reset_date = datetime.fromisoformat(reset_date_str)
+            reset_date = datetime.fromisoformat(reset_date_str).replace(tzinfo=timezone.utc)
             if now > reset_date:
                 shop_data["tokens_used"] = 0
                 # Set next reset to same day next month
