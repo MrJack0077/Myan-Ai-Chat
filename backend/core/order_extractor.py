@@ -76,8 +76,13 @@ def extract_name(text: str) -> str:
             name = m.group(1).strip()
             name = re.sub(r"['\"]+$", '', name)  # Clean trailing quotes
             name = re.sub(r'\s+', ' ', name).strip()
-            if len(name) >= 2 and not name.isdigit():
-                return name
+            # Filter out non-name Myanmar phrases
+            non_names = ['ဝယ်ယူ', 'မှာယူ', 'အော်ဒါ', 'တင်ပေး', 'ပို့ဆောင်', 'ငွေပေး', 
+                        'ပေးချေ', 'ကျေးဇူး', 'ကြိုဆို', 'မင်္ဂလာ', 'ဆက်သွယ်',
+                        'ရန်', 'မည်', 'ရှင့်', 'ခင်ဗျ', 'တောင်းပန်']
+            if any(nn in name for nn in non_names) or len(name) < 2 or name.isdigit():
+                continue
+            return name
     return ""
 
 
@@ -100,7 +105,16 @@ def extract_address(text: str) -> str:
             if any(ai_word in addr.lower() for ai_word in ['ပို့ဆောင်', 'မှာယူ', 'ငွေပေး', 'ကျေးဇူး', 'deliver']):
                 continue
             if 5 <= len(addr) <= 80:
-                return addr
+                # Split by newline — take the last line (usually the real address)
+                lines = addr.split('\n')
+                addr = lines[-1].strip() if len(lines) > 1 else addr
+                # If still contains AI text, try to extract just the street part
+                if len(addr) > 60:
+                    # Try to find street number pattern
+                    street_m = re.search(r'(?:no|No|No\.|အမှတ်)[\s.]*\d+[\s,]*([\w\s\u1000-\u109F]{5,40})', addr)
+                    if street_m:
+                        addr = f"No. {street_m.group(0).strip()}" if not addr.lower().startswith('no') else street_m.group(0).strip()
+                return addr[:80]
     return ""
 
 

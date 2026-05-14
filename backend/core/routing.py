@@ -43,9 +43,9 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
     elif is_service:
         print("   - Selected: SERVICE_AGENT")
         final_data = await run_service_agent(user_msg, tool_info, ai_config, policies, prof, BASE_MODEL_NAME, chat_history=chat_history, shop_doc_id=shop_doc_id, media_parts=media_parts)
-    elif order_state in ["COLLECTING", "WAITING_FOR_SLIP", "SUMMARY_SENT"] and not is_inquiry:
-        # Order flow path
-        print(f"   - Selected: ORDER_AGENT (state={order_state})")
+    elif order_state in ["COLLECTING", "WAITING_FOR_SLIP", "SUMMARY_SENT"]:
+        # Active order flow — ALWAYS use order agent regardless of intent
+        print(f"   - Selected: ORDER_AGENT (state={order_state}, intent={intent_type})")
         if order_state == "WAITING_FOR_SLIP" and attachments:
             prof["current_order"]["payment_slip_url"] = attachments[0]
             user_msg = "Slip uploaded."
