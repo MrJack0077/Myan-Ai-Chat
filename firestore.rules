@@ -99,6 +99,11 @@ service cloud.firestore {
         allow update: if isVendorForShop(shopId) || isAdmin();
         allow delete: if isAdmin() || isVendorForShop(shopId);
       }
+      
+      // Allow listing the orders collection itself
+      match /orders {
+        allow list: if isAdmin() || isVendorForShop(shopId);
+      }
 
       // ---- Shop Semantic Cache ----
       match /semantic_cache/{cacheId} {
