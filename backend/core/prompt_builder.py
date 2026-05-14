@@ -584,12 +584,18 @@ def build_user_prompt(user_msg, profile=None, chat_history=None, tool_info=None)
 
     # Two-Tier Memory: Recent messages + Conversation Summary
     if chat_history:
+        # Limit to last 4 lines to keep prompt size reasonable
+        lines = chat_history.strip().split('\n')
+        if len(lines) > 4:
+            chat_history = '\n'.join(lines[-4:])
         conv_ctx = build_conversation_context(chat_history, profile or {})
         if conv_ctx:
             parts.append(conv_ctx)
 
     if tool_info:
-        parts.append(f"[Product Database]\n{tool_info}")
+        # Trim tool_info to reduce prompt size (max 1000 chars)
+        trimmed_tool = tool_info[:1000] + ("..." if len(tool_info) > 1000 else "")
+        parts.append(f"[Product Database]\n{trimmed_tool}")
 
     parts.append(f"Customer Message: {user_msg}")
     return "\n\n".join(parts)

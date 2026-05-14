@@ -1,4 +1,5 @@
 import json
+import time
 import typing_extensions
 from .base import call_agent_model, merge_tokens, make_fallback_response
 from core.prompt_builder import assemble_system_prompt, build_user_prompt
@@ -42,20 +43,16 @@ async def run_order_agent(user_msg, profile, ai_cfg, base_model_name, chat_histo
         f"Deli={curr.get('deli_charge', 0)} {currency} | Total={curr.get('total_price', 0)} {currency}\n"
         f"OrderState={dynamics.get('order_state', 'NONE')} | Slip={'Yes' if curr.get('payment_slip_url') else 'No'}",
         "[ORDER FLOW]\n"
-        "1. IMAGE: If user sends an image, look at it. If it's a payment slip/screenshot, and OrderState is WAITING_FOR_SLIP or SUMMARY_SENT, recognize it as proof of payment.\n"
-        "2. Context memory: if you already know Name/Phone/Address, confirm instead of re-asking.\n"
-        "3. Ask missing info one at a time naturally: name → phone → address → payment.\n"
-        "   Like a real person: 'နာမည်လေးပြောပေးပါဦးရှင့်' not robotic forms.\n"
-        "4. Match address to [DELIVERY INFO], extract exact deli_charge.\n"
-        f"5. Suggest ONLY: {payment_methods}, Cash on Delivery.\n"
-        f"6. Calculate total_price = sum(item prices) + deli_charge. Currency: {currency}.\n"
-        "7. If digital payment & no slip yet → give account info naturally, ask for slip, intent=WAITING_FOR_SLIP.\n"
-        "8. Once slip received (via IMAGE) → thank warmly, show summary, ask confirm, intent=SUMMARY_SENT.\n"
-        "9. User confirms → intent=ORDER_CONFIRMED, is_complex=true.\n"
-        "10. If the user asks a question unrelated to ordering (e.g. product specs, details), ANSWER it briefly using [PRODUCT PRICES] and keep intent=COLLECTING. DO NOT set intent=ORDER_CONFIRMED.\n"
-        "11. Use extracted.buttons for quick choices (payment options, Confirm/Edit).\n"
-        "12. Validate: Myanmar phone (09/+959, 9-11 digits), complete address.\n"
-        "13. Be warm and human. Confirm details like a real shop assistant: 'အော်ဒါလေး confirm လုပ်လိုက်တော့မလားရှင့်' not robotic forms.",
+        "1. Look at images — if payment slip, recognize as proof of payment.\n"
+        "2. Confirm known info instead of re-asking (Name/Phone/Address).\n"
+        "3. Ask missing info naturally one at a time: name → phone → address → payment.\n"
+        f"4. Suggest ONLY: {payment_methods}, Cash on Delivery.\n"
+        f"5. Calculate total = sum items + deli_charge. Currency: {currency}.\n"
+        "6. If digital payment & no slip → give account info, ask for slip.\n"
+        "7. User confirms → intent=ORDER_CONFIRMED, is_complex=true.\n"
+        "8. If question unrelated to ordering → answer from [PRODUCT PRICES], keep intent=COLLECTING.\n"
+        "9. Use buttons for quick choices. Validate Myanmar phone format.\n"
+        "10. Be warm and human like a real shop assistant.",
     ]
 
     shop_context = {
@@ -73,12 +70,14 @@ async def run_order_agent(user_msg, profile, ai_cfg, base_model_name, chat_histo
     contents.append(user_prompt)
 
     try:
+        t_ai = time.time()
         data, tokens = await call_agent_model(
             base_model_name, sys_inst,
             contents=contents,
             response_schema=OrderAgentResponse,
             temperature=0.1,
         )
+        print(f"⏱️  Order Agent AI: {(time.time()-t_ai):.2f}s | prompt={tokens.get('prompt_tokens',0)} tokens", flush=True)
         return merge_tokens(data, tokens)
     except Exception as e:
         print(f"🔥 Order Agent Error: {e}")
