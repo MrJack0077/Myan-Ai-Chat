@@ -44,6 +44,7 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
         print("   - Selected: SERVICE_AGENT")
         final_data = await run_service_agent(user_msg, tool_info, ai_config, policies, prof, BASE_MODEL_NAME, chat_history=chat_history, shop_doc_id=shop_doc_id, media_parts=media_parts)
     elif order_state in ["COLLECTING", "WAITING_FOR_SLIP", "SUMMARY_SENT"] and not is_inquiry:
+        # Order flow path
         print(f"   - Selected: ORDER_AGENT (state={order_state})")
         if order_state == "WAITING_FOR_SLIP" and attachments:
             prof["current_order"]["payment_slip_url"] = attachments[0]
@@ -54,8 +55,25 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
         
         # ── Auto-detect confirmation keywords ──
         msg_lower = user_msg.lower()
-        confirm_keywords = ['yes', 'ဟုတ်', 'confirm', 'ok', 'okay', 'အင်း', 'မှန်တယ်', 'ဟုတ်ကဲ့', 'မှာ', 'တင်ပေး', 'ယူမယ်']
-        if any(kw in msg_lower for kw in confirm_keywords) and order_state in ["SUMMARY_SENT", "COLLECTING"]:
+        confirm_keywords = ['yes', 'ဟုတ်', 'confirm', 'ok', 'okay', 'အင်း', 'မှန်တယ်', 'ဟုတ်ကဲ့', 'မှာ', 'တင်ပေး', 'ယူမယ်', 'do it', 'go ahead', 'proceed']
+        if any(kw in msg_lower for kw in confirm_keywords):
+            has_data = (prof["identification"].get("name") and 
+                       prof["current_order"].get("items"))
+            if has_data:
+                print(f"🔔 Auto-detected confirmation keyword → forcing ORDER_CONFIRMED", flush=True)
+                final_data["intent"] = "ORDER_CONFIRMED"
+                final_data["is_complex"] = True
+    elif order_state in ["COLLECTING", "WAITING_FOR_SLIP", "SUMMARY_SENT"] and is_inquiry:
+        # Customer is in order flow but message looks like product inquiry
+        # → treat as order continuation, not new product inquiry
+        print(f"   - Selected: ORDER_AGENT (state={order_state}, inquiry override)", flush=True)
+        final_data = await run_order_agent(user_msg, prof, ai_config, BASE_MODEL_NAME, chat_history, delivery_info, payment_info, tool_info, currency, policies, media_parts=media_parts, shop_doc_id=shop_doc_id)
+        if final_data.get("intent") in ["SUMMARY_SENT", "WAITING_FOR_SLIP", "COLLECTING"]:
+            prof["dynamics"]["order_state"] = final_data["intent"]
+        
+        msg_lower = user_msg.lower()
+        confirm_keywords = ['yes', 'ဟုတ်', 'confirm', 'ok', 'okay', 'အင်း', 'မှန်တယ်', 'ဟုတ်ကဲ့', 'မှာ', 'တင်ပေး', 'do it', 'go ahead', 'proceed']
+        if any(kw in msg_lower for kw in confirm_keywords):
             has_data = (prof["identification"].get("name") and 
                        prof["current_order"].get("items"))
             if has_data:
@@ -111,19 +129,25 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
     # ── Professional Order Extraction (keyword-based, 0ms) ──
     from .order_extractor import extract_order_data
     kw_data = extract_order_data(user_msg, tool_info)
-    if kw_data.get("name") and not prof["identification"].get("name"):
-        prof["identification"]["name"] = kw_data["name"]
-    if kw_data.get("phone") and not prof["identification"].get("phone"):
-        prof["identification"]["phone"] = kw_data["phone"]
-    if kw_data.get("address") and not prof["current_order"].get("address"):
-        prof["current_order"]["address"] = kw_data["address"]
-    if kw_data.get("payment_method") and not prof["current_order"].get("payment_method"):
-        prof["current_order"]["payment_method"] = kw_data["payment_method"]
-    if kw_data.get("items") and not prof["current_order"].get("items"):
-        prof["current_order"]["items"] = kw_data["items"]
-    if kw_data.get("total_price") and not prof["current_order"].get("total_price"):
-        prof["current_order"]["total_price"] = kw_data["total_price"]
     if kw_data:
+        # Apply keyword data — overwrite if new data is better quality
+        if kw_data.get("name") and len(kw_data["name"]) >= 2:
+            old_name = prof["identification"].get("name", "")
+            if not old_name or len(old_name) < 3 or len(kw_data["name"]) > len(old_name):
+                prof["identification"]["name"] = kw_data["name"]
+        if kw_data.get("phone"):
+            prof["identification"]["phone"] = kw_data["phone"]
+        if kw_data.get("address"):
+            old_addr = prof["current_order"].get("address", "")
+            # Overwrite if old address contains AI junk text
+            if not old_addr or any(ai_word in old_addr for ai_word in ['ပို့ဆောင်', 'မှာယူ', 'ငွေပေး', 'ကျေးဇူး']):
+                prof["current_order"]["address"] = kw_data["address"]
+        if kw_data.get("payment_method"):
+            prof["current_order"]["payment_method"] = kw_data["payment_method"]
+        if kw_data.get("items"):
+            prof["current_order"]["items"] = kw_data["items"]
+        if kw_data.get("total_price"):
+            prof["current_order"]["total_price"] = kw_data["total_price"]
         print(f"🔑 Extracted: {kw_data}", flush=True)
     
     # ── Legacy keyword extraction (backup) ──
