@@ -64,15 +64,20 @@ def check_token_reset(shop_data: dict) -> dict:
             if now > reset_date:
                 shop_data["tokens_used"] = 0
                 # Set next reset to same day next month
-                from dateutil.relativedelta import relativedelta
-                shop_data["token_reset_date"] = (reset_date + relativedelta(months=1)).isoformat()
+                if reset_date.month == 12:
+                    next_month = reset_date.replace(year=reset_date.year + 1, month=1)
+                else:
+                    next_month = reset_date.replace(month=reset_date.month + 1)
+                shop_data["token_reset_date"] = next_month.isoformat()
         except (ValueError, ImportError):
             pass
     
     if not shop_data.get("token_reset_date"):
         # First time — reset at end of current month
-        from dateutil.relativedelta import relativedelta
-        next_month = now.replace(day=1) + relativedelta(months=1)
+        if now.month == 12:
+            next_month = now.replace(year=now.year + 1, month=1, day=1)
+        else:
+            next_month = now.replace(month=now.month + 1, day=1)
         shop_data["token_reset_date"] = next_month.isoformat()
         shop_data["tokens_used"] = 0
     
