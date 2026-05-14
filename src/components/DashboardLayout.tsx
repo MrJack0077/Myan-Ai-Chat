@@ -74,7 +74,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       if (response.ok) {
         const data = await response.json();
         showToast(data.message || "Cache refreshed!", "success");
-        setTimeout(() => window.location.reload(), 1500);
+        // Soft reload — don't break dynamic imports
+        setTimeout(() => {
+          window.location.href = window.location.pathname + window.location.search;
+        }, 1000);
       } else {
         throw new Error('Failed to clear cache');
       }
