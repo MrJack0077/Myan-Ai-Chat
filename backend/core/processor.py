@@ -404,7 +404,8 @@ async def process_core_logic(data):
     await send_sendpulse_messages(acc_id, user_id, final_data, reply_text, token)
 
     # ── 15. Order Confirmation ──
-    if is_complex and final_data.get("intent") == "ORDER_CONFIRMED":
+    if final_data.get("intent") == "ORDER_CONFIRMED":
+        print(f"🔔 Order confirmed! Saving to database...", flush=True)
         await handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token, agent_id, prof, currency, final_data)
 
     # ── 16. Save to Semantic Cache ──
