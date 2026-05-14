@@ -43,6 +43,7 @@ export default function ShopCreateEditModal({ isOpen, onClose, mode, initialData
           sendpulseClientId: newShop.sendpulseClientId || undefined,
           sendpulseClientSecret: newShop.sendpulseClientSecret || undefined,
           agentId: newShop.agentId || undefined,
+          plan: newShop.plan || 'basic',
           disableCache: newShop.disableCache,
           databaseName: `db_${newShop.slug}`,
           vendorCredentials: {
@@ -66,6 +67,7 @@ export default function ShopCreateEditModal({ isOpen, onClose, mode, initialData
           sendpulseClientId: newShop.sendpulseClientId || undefined,
           sendpulseClientSecret: newShop.sendpulseClientSecret || undefined,
           agentId: newShop.agentId || undefined,
+          plan: newShop.plan || 'basic',
           disableCache: newShop.disableCache
         });
         showToast('Shop configuration updated', 'success');
@@ -318,6 +320,30 @@ export default function ShopCreateEditModal({ isOpen, onClose, mode, initialData
                     <div className="text-sm text-slate-500 font-medium">စမ်းသပ်ရန်အတွက် - database မှ တိုက်ရိုက်ခေါ်ယူရန်</div>
                   </div>
                 </label>
+              </div>
+
+              {/* ── Plan Section ── */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-indigo-500" /> Subscription Plan
+                </h3>
+                <div className="grid grid-cols-3 gap-3">
+                  {(['basic', 'premium', 'enterprise'] as const).map(p => (
+                    <label key={p} className={`flex flex-col items-center gap-2 p-4 border-2 rounded-2xl cursor-pointer transition-all ${
+                      newShop.plan === p ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-indigo-300'
+                    }`}>
+                      <input type="radio" name="plan" className="sr-only"
+                        checked={newShop.plan === p}
+                        onChange={() => setNewShop({ ...newShop, plan: p })}
+                      />
+                      <span className="text-sm font-bold capitalize">{p}</span>
+                      <span className="text-xs text-slate-500">
+                        {p === 'basic' ? '500 subs • 1 ch • 5M tok' :
+                         p === 'premium' ? '1000 subs • 3 ch • 10M tok' : 'Custom'}
+                      </span>
+                    </label>
+                  ))}
+                </div>
               </div>
 
             </div>
