@@ -557,11 +557,36 @@ export default function OrderManager({ shopId, currency = 'MMK' }: { shopId: str
                       </td>
                       <td className="px-4 py-3">
                         <p className="text-sm font-bold text-zinc-900">{symbol}{(order.total_price || order.totalAmount).toLocaleString()}</p>
-                        {(order as any).deli_charge > 0 && (
-                          <p className="text-[10px] text-zinc-400">+{symbol}{(order as any).deli_charge} delivery</p>
-                        )}
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {(order as any).deli_charge > 0 && (
+                            <span className="text-[10px] text-zinc-400">+{symbol}{(order as any).deli_charge} deli</span>
+                          )}
+                          {(order.payment_slip_url || order.paymentScreenshotUrl) && (
+                            <span className="text-[10px] text-green-600 font-bold" title="Payment slip uploaded">📎Slip</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <span className={cn(
+                            "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                            getStatusColor(order.status)
+                          )}>
+                            {getStatusIcon(order.status)} {order.status}
+                          </span>
+                          {(order.payment_slip_url || order.paymentScreenshotUrl) && (
+                            <span className={cn(
+                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                              order.paymentStatus === 'verified' ? 'bg-green-50 text-green-700 border-green-200' :
+                              order.paymentStatus === 'rejected' ? 'bg-red-50 text-red-700 border-red-200' :
+                              'bg-amber-50 text-amber-700 border-amber-200'
+                            )}>
+                              {order.paymentStatus === 'verified' ? '✅' : order.paymentStatus === 'rejected' ? '❌' : '⏳'} 
+                              {order.paymentStatus || 'pending_payment'}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                         <span className={cn(
                           "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border uppercase tracking-wider",
                           getStatusColor(order.status)
