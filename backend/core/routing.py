@@ -51,6 +51,18 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
         final_data = await run_order_agent(user_msg, prof, ai_config, BASE_MODEL_NAME, chat_history, delivery_info, payment_info, tool_info, currency, policies, media_parts=media_parts, shop_doc_id=shop_doc_id)
         if final_data.get("intent") in ["SUMMARY_SENT", "WAITING_FOR_SLIP", "COLLECTING"]:
             prof["dynamics"]["order_state"] = final_data["intent"]
+        
+        # ── Auto-detect confirmation keywords ──
+        msg_lower = user_msg.lower()
+        confirm_keywords = ['yes', 'ဟုတ်', 'confirm', 'ok', 'okay', 'အင်း', 'မှန်တယ်', 'ဟုတ်ကဲ့', 'မှာ', 'တင်ပေး', 'ယူမယ်']
+        if any(kw in msg_lower for kw in confirm_keywords) and order_state in ["SUMMARY_SENT", "COLLECTING"]:
+            has_data = (prof["identification"].get("name") and 
+                       prof["identification"].get("phone") and 
+                       prof["current_order"].get("items"))
+            if has_data:
+                print(f"🔔 Auto-detected confirmation keyword → forcing ORDER_CONFIRMED", flush=True)
+                final_data["intent"] = "ORDER_CONFIRMED"
+                final_data["is_complex"] = True
     elif media_parts and intent_type not in ["ORDER", "START_ORDER"]:
         print("   - Selected: MEDIA_AGENT (photo/voice analysis)")
         final_data = await run_media_agent(user_msg, tool_info, ai_config, policies, prof, BASE_MODEL_NAME, chat_history, media_parts, delivery_info, payment_info, shop_doc_id=shop_doc_id, photo_context=photo_context)
@@ -95,6 +107,17 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
 
     # Save extracted data to profile (using nested helper)
     update_nested_profile(prof, final_data.get("extracted", {}))
+    extracted = final_data.get("extracted", {})
+    if not extracted or not extracted.get("name"):
+        # ⚠️ AI didn't extract data — try keyword-based fallback
+        print(f"⚠️ No extracted data from AI — trying keyword fallback", flush=True)
+        import re
+        kw_name = re.search(r'name.*?([A-Za-z\u1000-\u109F\s]{2,20})', user_msg, re.IGNORECASE)
+        kw_phone = re.search(r'(09\d{7,9}|\+?959\d{7,9})', user_msg)
+        if kw_name and not prof["identification"].get("name"):
+            prof["identification"]["name"] = kw_name.group(1).strip()
+        if kw_phone and not prof["identification"].get("phone"):
+            prof["identification"]["phone"] = kw_phone.group(1)
     await save_profile(shop_doc_id, user_id, prof)
 
     return final_data, total_tokens
