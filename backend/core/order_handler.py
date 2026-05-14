@@ -203,33 +203,61 @@ async def handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token
         items_col = db.collection("shops").document(shop_doc_id).collection("items")
         for item_name in items_list:
             try:
-                # Find matching item by name
                 matching = items_col.where("name", "==", item_name).limit(1).get()
+                matched_doc = None
+                matched_data = None
+                
                 if len(matching) > 0:
-                    item_doc = matching[0]
-                    item_data = item_doc.to_dict()
-                    current_stock = item_data.get("stock_quantity", 0)
-                    new_stock = max(0, current_stock - item_qty)
-                    item_doc.reference.update({
-                        "stock_quantity": new_stock,
-                        "is_available": new_stock > 0,
-                        "updated_at": datetime.now(timezone.utc).isoformat()
-                    })
-                    print(f"📦 Stock reduced: {item_name} {current_stock}→{new_stock}", flush=True)
+                    matched_doc = matching[0]
+                    matched_data = matched_doc.to_dict()
                 else:
                     # Try partial match
                     all_items = items_col.limit(50).get()
                     for doc in all_items:
                         data = doc.to_dict()
                         if item_name.lower() in (data.get("name", "") or "").lower():
-                            current_stock = data.get("stock_quantity", 0)
-                            new_stock = max(0, current_stock - item_qty)
-                            doc.reference.update({
-                                "stock_quantity": new_stock,
-                                "is_available": new_stock > 0
-                            })
-                            print(f"📦 Stock reduced (partial match): {data.get('name')} {current_stock}→{new_stock}", flush=True)
+                            matched_doc = doc
+                            matched_data = data
                             break
+                
+                if matched_doc and matched_data:
+                    stock_type = matched_data.get("stock_type", "count")
+                    
+                    if stock_type == "count":
+                        # Count-based stock → reduce quantity
+                        current_stock = matched_data.get("stock_quantity", 0)
+                        new_stock = max(0, current_stock - item_qty)
+                        matched_doc.reference.update({
+                            "stock_quantity": new_stock,
+                            "is_available": new_stock > 0,
+                            "updated_at": datetime.now(timezone.utc).isoformat()
+                        })
+                        print(f"📦 Stock reduced (count): {matched_data.get('name')} {current_stock}→{new_stock}", flush=True)
+                    
+                    elif stock_type == "status":
+                        # Status-based stock → just set unavailable if qty exceeds
+                        current_qty = matched_data.get("stock_quantity", 1)
+                        new_qty = max(0, current_qty - item_qty)
+                        matched_doc.reference.update({
+                            "stock_quantity": new_qty,
+                            "is_available": new_qty > 0,
+                            "updated_at": datetime.now(timezone.utc).isoformat()
+                        })
+                        status = "❌ Unavailable" if new_qty <= 0 else "✅ Available"
+                        print(f"📦 Stock updated (status): {matched_data.get('name')} → {status}", flush=True)
+                    
+                    else:
+                        # Unknown type — default to count
+                        current_stock = matched_data.get("stock_quantity", 0)
+                        new_stock = max(0, current_stock - item_qty)
+                        matched_doc.reference.update({
+                            "stock_quantity": new_stock,
+                            "is_available": new_stock > 0
+                        })
+                        print(f"📦 Stock reduced (default): {matched_data.get('name')} {current_stock}→{new_stock}", flush=True)
+                else:
+                    print(f"⚠️ Stock reduce: '{item_name}' not found in inventory", flush=True)
+                    
             except Exception as e:
                 print(f"⚠️ Stock reduce error for {item_name}: {e}", flush=True)
         
