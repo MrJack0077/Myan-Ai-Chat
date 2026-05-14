@@ -108,7 +108,25 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
     update_nested_profile(prof, final_data.get("extracted", {}))
     extracted = final_data.get("extracted", {})
     
-    # ── Keyword-based extraction (runs ALWAYS, fills gaps from AI) ──
+    # ── Professional Order Extraction (keyword-based, 0ms) ──
+    from .order_extractor import extract_order_data
+    kw_data = extract_order_data(user_msg, tool_info)
+    if kw_data.get("name") and not prof["identification"].get("name"):
+        prof["identification"]["name"] = kw_data["name"]
+    if kw_data.get("phone") and not prof["identification"].get("phone"):
+        prof["identification"]["phone"] = kw_data["phone"]
+    if kw_data.get("address") and not prof["current_order"].get("address"):
+        prof["current_order"]["address"] = kw_data["address"]
+    if kw_data.get("payment_method") and not prof["current_order"].get("payment_method"):
+        prof["current_order"]["payment_method"] = kw_data["payment_method"]
+    if kw_data.get("items") and not prof["current_order"].get("items"):
+        prof["current_order"]["items"] = kw_data["items"]
+    if kw_data.get("total_price") and not prof["current_order"].get("total_price"):
+        prof["current_order"]["total_price"] = kw_data["total_price"]
+    if kw_data:
+        print(f"🔑 Extracted: {kw_data}", flush=True)
+    
+    # ── Legacy keyword extraction (backup) ──
     import re
     msg_lower = user_msg.lower()
     
