@@ -16,8 +16,9 @@ except Exception:
 async def call_agent_model(base_model_name, sys_inst, contents, response_schema, temperature=0.2):
     """Call Vertex AI first (better limits), fallback to genai AI Studio."""
     
-    # Try Vertex AI first
-    if _use_vertex:
+    # Try Vertex AI first — only for models known to work on Vertex
+    _vertex_models = {'gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-lite-001'}
+    if _use_vertex and base_model_name in _vertex_models:
         try:
             from vertexai.generative_models import GenerativeModel, GenerationConfig
             model = GenerativeModel(base_model_name, system_instruction=sys_inst)
