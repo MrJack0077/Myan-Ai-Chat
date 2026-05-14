@@ -137,11 +137,13 @@ def extract_items_from_tool_info(tool_info: str) -> tuple:
             
         # Look for price indicators
         if any(kw in line.lower() for kw in ['price', 'mmk', 'kyat', 'ကျပ်', '$', 'ks']):
-            # Extract name — first meaningful text segment
-            parts = re.split(r'[|：:\-–—]{2,}|\s{2,}', line)
-            name = parts[0].strip() if parts else line[:50]
+            # Extract name — first segment before pipe or price
+            # Split by common delimiters
+            name = re.split(r'\s*\|\s*|\s{3,}', line)[0].strip()
             name = re.sub(r'^[📦🛒🛍️\s🔥💡⭐✨]+', '', name)
             name = re.sub(r'^(Name|Product|Item)[\s:：]*', '', name, flags=re.IGNORECASE)
+            # Take only the product name part (before "Price:" or "|")
+            name = re.split(r'\s*(?:Price|MMK|Kyat|ကျပ်)\s*[:：]', name, flags=re.IGNORECASE)[0].strip()
             name = re.sub(r'\s{2,}', ' ', name).strip()
             
             if name and len(name) >= 3 and name.lower() not in ('name', 'product', 'item', 'none'):

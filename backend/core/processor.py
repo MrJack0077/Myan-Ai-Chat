@@ -357,10 +357,15 @@ async def process_core_logic(data):
     # ── 13. Agent Routing ──
     should_bypass = intent_type in ["ORDER", "START_ORDER", "ORDER_CHECKOUT", "COMPLAINT_OR_HUMAN", "SLIP_UPLOAD"]
 
-    if cached_reply:
+    if cached_reply and order_state == "NONE":
+        # Only use cache when NOT in active order flow
         reply_text, is_complex = cached_reply, False
         final_data = {"reply": reply_text, "is_complex": False, "intent": "CACHED_FAQ"}
         total_tokens = 0
+    elif cached_reply and order_state != "NONE":
+        # In order flow — skip cache, let agent handle it
+        print(f"⚠️ Cache skipped — order is active (state={order_state})", flush=True)
+        cached_reply = None  # Reset so agent runs below
     elif reply_text and not is_complex and intent_type not in ["PRODUCT_INQUIRY", "ORDER", "START_ORDER", "ORDER_CHECKOUT", "SLIP_UPLOAD"] and not media_parts:
         final_data = {
             "reply": reply_text, "is_complex": False, "intent": intent_type,
