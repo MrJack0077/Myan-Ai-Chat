@@ -121,10 +121,14 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
         ]
         for pat in name_pats:
             m = re.search(pat, user_msg, re.IGNORECASE)
-            if m and len(m.group(1).strip()) >= 2:
-                prof["identification"]["name"] = m.group(1).strip()
-                print(f"🔑 Extracted name: {prof['identification']['name']}", flush=True)
-                break
+            if m:
+                name = m.group(1).strip()
+                # Clean trailing junk characters
+                name = re.sub(r'[\'"]+$', '', name)
+                if len(name) >= 2:
+                    prof["identification"]["name"] = name
+                    print(f"🔑 Extracted name: {prof['identification']['name']}", flush=True)
+                    break
     
     # Phone (Myanmar format)
     if not prof["identification"].get("phone"):
@@ -135,13 +139,47 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
     
     # Address
     if not prof["current_order"].get("address"):
-        am = re.search(r'(?:address|လိပ်စာ|နေရပ်)[\s:：]*(.+?)(?:\.|$|\n)', user_msg, re.IGNORECASE)
-        if am and len(am.group(1).strip()) >= 5:
-            prof["current_order"]["address"] = am.group(1).strip()
-            print(f"🔑 Extracted address", flush=True)
+        # Myanmar address patterns — be strict to avoid AI text
+        addr_pats = [
+            r'(?:No\.?\s*\d+|အမှတ်\s*\d+)[\s,，]+([A-Za-z\u1000-\u109F\s]{5,40}?)(?:\.|$|\n|၊)',
+            r'(?:ရန်ကုန်|မန္တလေး|နေပြည်တော်|yangon|mandalay|dagon|တာမွေ|ဗဟန်း|လှိုင်|သာကေ|မရမ်း)[\w\u1000-\u109F\s,]{5,30}',
+        ]
+        for pat in addr_pats:
+            am = re.search(pat, user_msg, re.IGNORECASE)
+            if am:
+                addr = am.group(0).strip()
+                if len(addr) >= 5 and len(addr) <= 100:
+                    prof["current_order"]["address"] = addr
+                    print(f"🔑 Extracted address: {addr[:50]}", flush=True)
+                    break
     
     if not extracted:
         print(f"⚠️ No extracted data from AI — using keyword extraction only", flush=True)
+    
+    # ── Auto-populate items from order context ──
+    if not prof["current_order"].get("items") and order_state in ["COLLECTING", "SUMMARY_SENT"]:
+        # Try to extract product name from tool_info that was discussed
+        if tool_info:
+            for line in tool_info.split('\n')[:5]:
+                line = line.strip()
+                if line and any(kw in line.lower() for kw in ['price', 'mmk', 'kyat', 'ကျပ်']):
+                    # This is a product line — extract name
+                    name_match = re.match(r'^([^|]+)', line)
+                    if name_match:
+                        product_name = name_match.group(1).strip()
+                        if product_name and len(product_name) >= 3:
+                            prof["current_order"]["items"] = [product_name]
+                            print(f"🔑 Auto-populated items: [{product_name}]", flush=True)
+                            
+                            # Try to extract price too
+                            price_m = re.search(r'(\d[\d,]*)\s*(?:MMK|kyat|ကျပ်|\$)', line)
+                            if price_m:
+                                try:
+                                    prof["current_order"]["total_price"] = int(price_m.group(1).replace(',', ''))
+                                    print(f"🔑 Auto-populated price: {prof['current_order']['total_price']}", flush=True)
+                                except:
+                                    pass
+                            break
     await save_profile(shop_doc_id, user_id, prof)
 
     return final_data, total_tokens
