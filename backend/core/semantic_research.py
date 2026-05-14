@@ -20,65 +20,53 @@ async def run_embedding_search(user_msg, shop_doc_id, currency):
         return "No items", None
 
     try:
-        # Try Vertex AI embedding first
         try:
-            from vertexai.language_models import TextEmbeddingModel
-            emb_model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL_NAME)
-            embeddings = emb_model.get_embeddings([user_msg])
-            if embeddings and embeddings[0].values:
-                emb_res = {'embedding': list(embeddings[0].values)}
-                print(f"✅ Vertex AI embedding: {len(embeddings[0].values)} dims", flush=True)
-            else:
-                raise Exception("Empty embedding")
-        except Exception as ve:
-            # Fallback to AI Studio embedding
-            print(f"⚠️ Vertex embedding failed, using AI Studio: {ve}", flush=True)
             emb_res = await genai.embed_content_async(
                 model=EMBEDDING_MODEL_NAME, content=user_msg,
                 task_type='retrieval_query', output_dimensionality=768,
             )
+        except Exception as e:
+            print(f"Embedding API Error: {e}")
+            return "No items", None
+
+        docs = await hybrid_search_items(shop_doc_id, user_msg, emb_res['embedding'], limit=10)
+
+        if docs:
+            res_list = []
+            for d in docs:
+                stock = int(d.get('stock_quantity') or 0)
+                status = "OUT OF STOCK" if stock <= 0 else f"In Stock ({stock})"
+                desc = d.get('description', '')
+                ai_desc = d.get('ai_custom_description', '')
+                ai_keys = d.get('ai_keywords', '')
+                usage = d.get('usage_instructions', '')
+                specs = d.get('specifications', '')
+                images = d.get('image_url') or d.get('images', [])
+                if isinstance(images, list):
+                    images = ','.join(images)
+                img_str = f" | Image: {images}" if images else ""
+                
+                def truncate(text, length=500):
+                    if not text: return ""
+                    return text[:length] + "..." if len(text) > length else text
+
+                info_parts = [f"📦 Name: {d.get('name')} | Price: {d.get('price')} {currency} | Status: {status}"]
+                if desc: info_parts.append(f"Desc: {truncate(desc)}")
+                if ai_desc: info_parts.append(f"AI Desc: {truncate(ai_desc, 300)}")
+                if ai_keys: info_parts.append(f"Keywords: {truncate(ai_keys, 200)}")
+                if specs: info_parts.append(f"Specs: {truncate(specs, 300)}")
+                if usage: info_parts.append(f"Usage: {truncate(usage, 300)}")
+                info_parts.append(img_str)
+                
+                res_list.append(" | ".join(filter(None, info_parts)))
+            tool_info = "Database Results:\n" + "\n\n".join(res_list)
+        else:
+            tool_info = "Database Result: No items found."
+
+        return tool_info, emb_res['embedding']
     except Exception as e:
-        print(f"Embedding API Error: {e}")
+        print(f"🔥 Research Error: {e}")
         return "No items", None
-
-    docs = await hybrid_search_items(shop_doc_id, user_msg, emb_res['embedding'], limit=10)
-
-    if docs:
-        res_list = []
-        for d in docs:
-            stock = int(d.get('stock_quantity') or 0)
-            status = "OUT OF STOCK" if stock <= 0 else f"In Stock ({stock})"
-            desc = d.get('description', '')
-            ai_desc = d.get('ai_custom_description', '')
-            ai_keys = d.get('ai_keywords', '')
-            usage = d.get('usage_instructions', '')
-            specs = d.get('specifications', '')
-            images = d.get('image_url') or d.get('images', [])
-            if isinstance(images, list):
-                images = ','.join(images)
-            img_str = f" | Image: {images}" if images else ""
-            
-            def truncate(text, length=500):
-                if not text: return ""
-                return text[:length] + "..." if len(text) > length else text
-
-            info_parts = [f"📦 Name: {d.get('name')} | Price: {d.get('price')} {currency} | Status: {status}"]
-            if desc: info_parts.append(f"Desc: {truncate(desc)}")
-            if ai_desc: info_parts.append(f"AI Desc: {truncate(ai_desc, 300)}")
-            if ai_keys: info_parts.append(f"Keywords: {truncate(ai_keys, 200)}")
-            if specs: info_parts.append(f"Specs: {truncate(specs, 300)}")
-            if usage: info_parts.append(f"Usage: {truncate(usage, 300)}")
-            info_parts.append(img_str)
-            
-            res_list.append(" | ".join(filter(None, info_parts)))
-        tool_info = "Database Results:\n" + "\n\n".join(res_list)
-    else:
-        tool_info = "Database Result: No items found."
-
-    return tool_info, emb_res['embedding']
-except Exception as e:
-    print(f"🔥 Research Error: {e}")
-    return "No items", None
 
 
 async def check_semantic_cache(shop_doc_id, user_msg, msg_emb, intent_type, order_state, acc_id):
