@@ -32,7 +32,7 @@ except Exception as e:
 
 BASE_MODEL_NAME = os.getenv("BASE_MODEL_NAME", "models/gemini-3.1-flash-lite-preview")
 FAST_MODEL_NAME = os.getenv("FAST_MODEL_NAME", "models/gemini-3.1-flash-lite-preview")
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "text-embedding-004")
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "gemini-embedding-2")
 
 
 sa_path = os.getenv("SERVICE_ACCOUNT_PATH")
