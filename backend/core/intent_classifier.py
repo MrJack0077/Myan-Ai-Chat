@@ -36,6 +36,9 @@ KEYWORD_INTENTS = [
     # ── GREETING ──
     (r'^(hi|hello|hey|မင်္ဂလာပါ|ဟိုင်း|နေကောင်း|good morning|good afternoon|good evening)[\s!]*$', 'GREETING', True),
     (r'^(thanks|thank you|ကျေးဇူး|ကျေးဇူးပါ|ok|okay|ဟုတ်)[\s!]*$', 'GREETING', True),
+    
+    # ── SLIP_UPLOAD ──
+    (r'\b(ပို့ပြီး|လွှဲပြီး|ပေးပြီး|paid|sent|transfer|slip|ဖြတ်ပိုင်း|ငွေလွှဲ|ပို့လိုက်|ပို့ထား)\b', 'SLIP_UPLOAD', True),
 ]
 
 COMPLEX_KEYWORDS = [

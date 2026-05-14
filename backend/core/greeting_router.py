@@ -16,6 +16,15 @@ async def run_greeting_router(user_msg, chat_history, ai_config, shop_doc_id, co
     router_start = time.time()
     style = resolve_style(ai_config)
     preset = style.get("_preset", {})
+    
+    # ── Load profile for personalized greeting ──
+    cust_name = ""
+    try:
+        from .profile_manager import get_user_profile
+        prof = await get_user_profile(shop_doc_id, user_id)
+        cust_name = prof.get("identification", {}).get("name", "").strip()
+    except Exception:
+        pass
 
     router_sys = f"""You are a friendly shop employee.
 Tone: {preset.get('tone_description', 'friendly, helpful')}.
@@ -68,15 +77,14 @@ JSON only: {{"intent": "GREETING" | "DOMAIN_REQUEST", "reply": "reply if GREETIN
                 except Exception:
                     # Last resort fallback: varied hardcoded
                     greetings_mm = [
-                        "မင်္ဂလာပါရှင့်။ ဘာကူညီပေးရမလဲရှင့်။",
-                        "မင်္ဂလာပါ။ ဘယ်လိုကူညီပေးရမလဲခင်ဗျ။",
-                        "ဟိုင်းရှင့် 👋 ဘာမေးချင်လဲရှင့်။",
-                        "မင်္ဂလာပါရှင့် 😊 ဘယ်လိုကူညီပေးရမလဲ။",
+                        f"မင်္ဂလာပါ{f' {cust_name}' if cust_name else ''}ရှင့်။ ဘာကူညီပေးရမလဲရှင့်။",
+                        f"ဟိုင်း{f' {cust_name}' if cust_name else ''} 👋 ဘယ်လိုကူညီပေးရမလဲရှင့်။",
+                        f"မင်္ဂလာပါရှင့်{f' {cust_name}ရေ' if cust_name else ''} 😊 ဘာမေးချင်လဲရှင့်။",
                     ]
                     greetings_en = [
-                        "Hello! How can I help you today?",
-                        "Hi there! 👋 What can I do for you?",
-                        "Good day! How may I assist you?",
+                        f"Hello{f' {cust_name}' if cust_name else ''}! How can I help you today?",
+                        f"Hi{f' {cust_name}' if cust_name else ''} 👋 What can I do for you?",
+                        f"Good day{f' {cust_name}' if cust_name else ''}! How may I assist you?",
                     ]
                     if lang.lower() in ["myanmar", "burmese", "mm"]:
                         reply_text = random.choice(greetings_mm)

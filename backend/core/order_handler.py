@@ -126,6 +126,29 @@ async def handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token
     items_str = ", ".join(items_list)
     total_price = curr.get('total_price', 0)
     
+    # ── Validation: ensure order has minimum required fields ──
+    missing = []
+    name = (ident.get('name') or '').strip()
+    phone = (ident.get('phone') or '').strip()
+    address = (curr.get('address') or '').strip()
+    
+    if not name or len(name) < 2:
+        missing.append("name")
+    if not phone or len(phone) < 7:
+        missing.append("phone")
+    if not address or len(address) < 5:
+        missing.append("address")
+    if not items_list or len(items_list) == 0:
+        missing.append("items")
+    if total_price <= 0:
+        missing.append("total_price")
+    
+    if missing:
+        print(f"⚠️ Order validation FAILED — missing: {', '.join(missing)}. Not saving.", flush=True)
+        return  # Don't save incomplete orders
+    
+    print(f"✅ Order validation PASSED — saving order for {name}", flush=True)
+    
     await log_shop_analytics(shop_doc_id, "ORDER_CONFIRMED", {"user_id": user_id, "total_price": total_price})
 
     # Save order to Firestore
@@ -148,6 +171,13 @@ async def handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token
         })
         # Store order ID for reference
         saved_order_id = doc_ref.id
+        
+        # Auto-invalidate cache after new order
+        try:
+            from .cache_manager import invalidate_shop_caches
+            await invalidate_shop_caches(shop_doc_id, acc_id=acc_id)
+        except Exception:
+            pass
     except Exception as e:
         print(f"Firestore order save error: {e}")
         saved_order_id = None

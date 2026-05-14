@@ -210,10 +210,14 @@ async def process_core_logic(data):
     # ── 6b. Smart Photo Analysis ──
     photo_context = ""
     if attachments or media_parts:
-        from agents.photo_analyzer import analyze_photo_context
-        photo_context = await analyze_photo_context(shop_doc_id, user_msg, order_state, len(attachments or []))
-        if photo_context:
-            print(f"📸 Photo Analysis: {photo_context[:80]}...", flush=True)
+        try:
+            from agents.photo_analyzer import analyze_photo_context
+            photo_context = await analyze_photo_context(shop_doc_id, user_msg, order_state, len(attachments or []), media_parts)
+            if photo_context:
+                print(f"📸 Photo Analysis: {photo_context[:80]}...", flush=True)
+        except Exception as e:
+            print(f"⚠️ Photo analysis skipped (import error): {e}", flush=True)
+            photo_context = ""
     
     # ── 7. Save to history ──
     hist_msg = user_msg if user_msg else ("[Voice Message]" if any("audio" in p.get("mime_type","") for p in media_parts) else ("[Photo]" if media_parts else "[Voice/Image/Payload]"))
