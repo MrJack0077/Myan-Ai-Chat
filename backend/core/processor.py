@@ -201,6 +201,10 @@ async def process_core_logic(data):
         await _handle_refresh(acc_id, shop_doc_id)
         return
 
+    # ── Append photo context to user message ──
+    if photo_context:
+        user_msg = f"{user_msg}\n\n[PHOTO CONTEXT]\n{photo_context}"
+
     # ── 5. Typing indicator ──
     await send_typing(acc_id, user_id, token)
 
