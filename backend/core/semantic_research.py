@@ -20,7 +20,20 @@ async def run_embedding_search(user_msg, shop_doc_id, currency):
         return "No items", None
 
     try:
+    try:
+        # Try Vertex AI embedding first
         try:
+            from vertexai.language_models import TextEmbeddingModel
+            emb_model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL_NAME)
+            embeddings = emb_model.get_embeddings([user_msg])
+            if embeddings and embeddings[0].values:
+                emb_res = {'embedding': list(embeddings[0].values)}
+                print(f"✅ Vertex AI embedding: {len(embeddings[0].values)} dims", flush=True)
+            else:
+                raise Exception("Empty embedding")
+        except Exception as ve:
+            # Fallback to AI Studio embedding
+            print(f"⚠️ Vertex embedding failed, using AI Studio: {ve}", flush=True)
             emb_res = await genai.embed_content_async(
                 model=EMBEDDING_MODEL_NAME, content=user_msg,
                 task_type='retrieval_query', output_dimensionality=768,
