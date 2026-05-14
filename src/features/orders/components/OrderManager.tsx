@@ -587,14 +587,6 @@ export default function OrderManager({ shopId, currency = 'MMK' }: { shopId: str
                           )}
                         </div>
                       </td>
-                        <span className={cn(
-                          "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border uppercase tracking-wider",
-                          getStatusColor(order.status)
-                        )}>
-                          {getStatusIcon(order.status)}
-                          {t(`orders.${order.status}`)}
-                        </span>
-                      </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button 
