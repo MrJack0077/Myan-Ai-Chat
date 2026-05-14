@@ -1,3 +1,8 @@
+export { default as ShopSettingsCard } from './ShopSettingsCard';
+export { default as BotIdentityCard } from './BotIdentityCard';
+export { default as CommunicationStyleCard } from './CommunicationStyleCard';
+export { default as HumanHandoffCard } from './HumanHandoffCard';
+export { default as KnowledgeBaseCard } from './KnowledgeBaseCard';
 export { default as ShopPoliciesCard } from './ShopPoliciesCard';
 export { default as BehavioralConstraintsCard } from './BehavioralConstraintsCard';
 export { default as FAQsCard } from './FAQsCard';
