@@ -40,6 +40,11 @@ def extract_order_data(user_msg: str, tool_info: str = "") -> dict:
         if price:
             data["total_price"] = price
     
+    # ── QUANTITY ──
+    qty = extract_quantity(user_msg)
+    if qty:
+        data["item_qty"] = qty
+    
     return data
 
 
@@ -189,13 +194,39 @@ def get_order_summary(prof: dict) -> str:
         parts.append(f"📍 {curr['address']}")
     
     items = curr.get("items", [])
+    qty = curr.get("item_qty", 1)
     if items:
-        parts.append(f"📦 {', '.join(items)}")
+        item_str = ', '.join(items)
+        if qty > 1:
+            item_str += f" x{qty}"
+        parts.append(f"📦 {item_str}")
     
-    if curr.get("total_price"):
-        parts.append(f"💰 {curr['total_price']:,} MMK")
+    item_price = curr.get("total_price", 0)
+    deli = curr.get("deli_charge", 0)
+    if item_price:
+        parts.append(f"💲 Items: {item_price:,} MMK")
+    if deli:
+        parts.append(f"🚚 Delivery: {deli:,} MMK")
+    if item_price or deli:
+        parts.append(f"💰 Total: {item_price + deli:,} MMK")
     
     if curr.get("payment_method"):
         parts.append(f"💳 {curr['payment_method']}")
     
     return "\n".join(parts) if parts else "No order data yet"
+
+
+def extract_quantity(text: str) -> int:
+    """Extract item quantity from user message."""
+    patterns = [
+        r'(\d+)\s*(?:လုံး|ခု|unit|pcs|pieces|items|qty)',
+        r'(?:qty|quantity|amount)[\s:：]*(\d+)',
+        r'(\d+)\s*x\s*',
+    ]
+    for pat in patterns:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            qty = int(m.group(1))
+            if 1 <= qty <= 100:
+                return qty
+    return 1  # Default to 1

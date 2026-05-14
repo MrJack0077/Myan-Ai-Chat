@@ -125,13 +125,31 @@ async def handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token
     items_list = curr.get("items", [])
     items_str = ", ".join(items_list)
     total_price = curr.get('total_price', 0)
+    deli_charge = curr.get('deli_charge', 0)
+    item_qty = curr.get('item_qty', 1)
+    
+    # ── Auto-calculate delivery charge from address ──
+    if not deli_charge and delivery_info and address:
+        for d in delivery_info:
+            region = (d.get('region', '') or '').lower()
+            addr_lower = address.lower()
+            if region and region in addr_lower:
+                deli_charge = d.get('amount', 0)
+                curr['deli_charge'] = deli_charge
+                print(f"🚚 Auto-calculated delivery: {deli_charge} MMK for {region}", flush=True)
+                break
+    
+    # ── Final total = items price + delivery ──
+    final_total = total_price + deli_charge
     
     print(f"🔍 ORDER SAVE DEBUG:", flush=True)
     print(f"   name: '{ident.get('name', '')}'", flush=True)
     print(f"   phone: '{ident.get('phone', '')}'", flush=True)
     print(f"   address: '{curr.get('address', '')}'", flush=True)
-    print(f"   items: {items_list}", flush=True)
-    print(f"   total_price: {total_price}", flush=True)
+    print(f"   items: {items_list} x{item_qty}", flush=True)
+    print(f"   item_price: {total_price}", flush=True)
+    print(f"   deli_charge: {deli_charge}", flush=True)
+    print(f"   total: {final_total}", flush=True)
     print(f"   payment: {curr.get('payment_method', '')}", flush=True)
     
     # ── Validation: ensure order has minimum required fields ──
@@ -166,14 +184,17 @@ async def handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token
             "customer_phone": ident.get('phone', ''),
             "customer_address": curr.get('address', ''),
             "items": items_list,
+            "item_qty": item_qty,
             "payment_method": curr.get('payment_method', ''),
-            "deli_charge": curr.get('deli_charge', 0),
-            "total_price": total_price,
+            "deli_charge": deli_charge,
+            "item_price": total_price,
+            "total_price": final_total,
             "payment_slip_url": curr.get('payment_slip_url', ''),
             "status": "pending",
             "sendpulse_bot_id": acc_id,
             "sendpulse_user_id": user_id,
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "notes": curr.get('notes', ''),
         })
         # Store order ID for reference
         saved_order_id = doc_ref.id
@@ -192,8 +213,11 @@ async def handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token
     note = (
         f"📝 **New Order Alert!**\n"
         f"👤 {ident.get('name', 'N/A')}\n📞 {ident.get('phone', 'N/A')}\n📍 {curr.get('address', 'N/A')}\n"
-        f"💳 {curr.get('payment_method', 'N/A')}\n🚚 Deli: {curr.get('deli_charge', 0)} {currency}\n"
-        f"💰 Total: {total_price} {currency}\n📦 {items_str}"
+        f"� {items_str} {'x'+str(item_qty) if item_qty > 1 else ''}\n"
+        f"💲 Items: {total_price:,} {currency}\n"
+        f"🚚 Delivery: {deli_charge:,} {currency}\n"
+        f"💰 Total: {final_total:,} {currency}\n"
+        f"💳 Payment: {curr.get('payment_method', 'N/A')}"
     )
     if curr.get('payment_slip_url'):
         note += f"\n🧾 Slip: {curr.get('payment_slip_url')}"
