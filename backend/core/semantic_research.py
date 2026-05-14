@@ -20,7 +20,6 @@ async def run_embedding_search(user_msg, shop_doc_id, currency):
         return "No items", None
 
     try:
-    try:
         # Try Vertex AI embedding first
         try:
             from vertexai.language_models import TextEmbeddingModel
@@ -38,10 +37,11 @@ async def run_embedding_search(user_msg, shop_doc_id, currency):
                 model=EMBEDDING_MODEL_NAME, content=user_msg,
                 task_type='retrieval_query', output_dimensionality=768,
             )
-        except Exception as e:
-            print(f"Embedding API Error: {e}")
-            return "No items", None
+    except Exception as e:
+        print(f"Embedding API Error: {e}")
+        return "No items", None
 
+    docs = await hybrid_search_items(shop_doc_id, user_msg, emb_res['embedding'], limit=10)
         docs = await hybrid_search_items(shop_doc_id, user_msg, emb_res['embedding'], limit=10)
 
         if docs:
