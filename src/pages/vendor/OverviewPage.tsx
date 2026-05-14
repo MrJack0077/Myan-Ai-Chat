@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Package, 
@@ -7,7 +7,15 @@ import {
   TrendingUp, 
   Activity,
   ArrowUpRight,
-  Sparkles
+  Sparkles,
+  Server,
+  Cpu,
+  Database,
+  Zap,
+  CheckCircle2,
+  XCircle,
+  Bot,
+  MessageSquare
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getCurrencySymbol } from '../../lib/utils';
