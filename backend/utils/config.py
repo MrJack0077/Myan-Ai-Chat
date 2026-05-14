@@ -18,6 +18,18 @@ if gm_key:
 else:
     print("❌ DEBUG: GEMINI_API_KEY NOT FOUND!")
 
+# Try Vertex AI init (optional — falls back to AI Studio if fails)
+_vertex_available = False
+try:
+    import vertexai
+    project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "myanaichat")
+    location = os.getenv("VERTEX_AI_LOCATION", "us-central1")
+    vertexai.init(project=project_id, location=location)
+    _vertex_available = True
+    print(f"✅ Vertex AI initialized: {project_id}/{location}")
+except Exception as e:
+    print(f"⚠️ Vertex AI not available — using AI Studio fallback: {e}")
+
 BASE_MODEL_NAME = os.getenv("BASE_MODEL_NAME", "models/gemini-3.1-flash-lite-preview")
 FAST_MODEL_NAME = os.getenv("FAST_MODEL_NAME", "models/gemini-3.1-flash-lite-preview")
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "models/gemini-embedding-2-preview")
