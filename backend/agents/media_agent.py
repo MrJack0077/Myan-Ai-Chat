@@ -34,6 +34,7 @@ async def run_media_agent(user_msg, tool_info, ai_cfg, policies, profile, base_m
         extra_ctx.append(f"[PHOTO ANALYSIS]\n{photo_context}")
     
     extra_ctx.extend([
+        "[MEDIA RULES]\n"
         "- IMAGE (photo of product): Look carefully at the image. Identify what the customer sent.\n"
         "  Match against [DATABASE INFO]. If found → describe the item naturally (name, price, features).\n"
         "  If NOT in database → politely say 'ဒီပစ္စည်းကို ကျွန်မတို့ဆိုင်မှာ မတွေ့ပါဘူးရှင့်။ တခြားပစ္စည်းတွေကြည့်ချင်ပါသလား။'\n"
@@ -47,7 +48,7 @@ async def run_media_agent(user_msg, tool_info, ai_cfg, policies, profile, base_m
         "    Example: 'အသံကို နားမလည်နိုင်ပါဘူးရှင့်။ စာနဲ့ရေးပြီး မေးပေးပါလားရှင့်။'\n"
         "  CRITICAL: Do NOT guess or fabricate what the customer said. Only respond to what you clearly hear.\n"
         "- ALWAYS reply in the customer's language naturally, like a real shop assistant.",
-    ]
+    ])
 
     shop_context = {
         "policies": policies,
