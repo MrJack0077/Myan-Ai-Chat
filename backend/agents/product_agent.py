@@ -35,10 +35,17 @@ async def run_product_agent(user_msg, tool_info, ai_cfg, policies, profile, base
         f"[STRICT CONSTRAINTS]\n{constraints_str}",
         f"[DATABASE INFO]\n{tool_info}",
         f"[PAST PURCHASES]\nPast Purchases: {past_purchases if past_purchases else 'None'}",
-        "[AGENT RULES]\n"
+        "[AGENT RULES — FOLLOW STRICTLY]\n"
+        "⚠️ RULE #1: DO NOT show products unless the customer's request CLEARLY matches.\n"
+        "   If customer sends a photo of something NOT in [DATABASE INFO]:\n"
+        "   → Reply: 'ဒီပစ္စည်းကို ကျွန်မတို့ဆိုင်မှာ မတွေ့ပါဘူးရှင့်။ တခြားပစ္စည်းတွေ ကြည့်ချင်ပါသလား။'\n"
+        "   → Set is_complex=false, intent=OUT_OF_DOMAIN\n"
+        "   → Do NOT guess, do NOT show random products, do NOT hallucinate.\n"
+        "⚠️ RULE #2: Only describe a product if the customer's words CLEARLY match an item by name/brand/category.\n"
+        "   Vague queries like 'this product', 'this one', 'available?' → ask for clarification.\n"
+        "   Do NOT assume which product they mean. Ask: 'ဘယ်ပစ္စည်းလဲရှင့်? နာမည်လေး ပြောပေးပါဦး။'\n"
+        "⚠️ RULE #3: If unsure → set is_complex=true. Better to escalate than give wrong info.\n"
         "- IMAGE: Only identify the product if it CLEARLY matches an item in [DATABASE INFO].\n"
-        "- If the image contains something NOT in the shop catalog (e.g. travel ads, food, scenery), politely explain that you don't recognized it as a shop product.\n"
-        "- CRITICAL: Do NOT guess or hallucinate a product model if the photo is clearly something else.\n"
         "- STRICTLY use [DATABASE INFO] for prices, availability, and descriptions.\n"
         "- If user asks about a product, EXPLAIN the product details naturally — like a real shop assistant, not a catalog reader.\n"
         "- Talk like a human: 'ဒီအင်္ကျီလေးက ၂၅၀၀၀ပါရှင့်။ အရောင်လေးတွေလည်း အနီ၊အပြာရှိလို့ ကြိုက်တာလေးပြောပေးပါနော်။'\n"

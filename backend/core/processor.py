@@ -219,6 +219,24 @@ async def process_core_logic(data):
             print(f"⚠️ Photo analysis skipped (import error): {e}", flush=True)
             photo_context = ""
     
+    # ── 6c. URL Image Detection ──
+    if not media_parts and not attachments:
+        import re as _re
+        urls = _re.findall(r'https?://[^\s]+', user_msg)
+        if urls:
+            for url in urls[:1]:  # Check first URL only
+                if any(x in url.lower() for x in ['image', 'photo', 'img', 'jpg', 'png', 'jpeg', 'webp', 'file', 'api/tel', 'sendpulse']):
+                    print(f"🔗 Detected image URL in message — analyzing...", flush=True)
+                    try:
+                        from agents.photo_analyzer import analyze_photo_context
+                        # Treat URL as attachment — analyze
+                        if not photo_context:
+                            photo_context = "🔗 Customer sent an image link. Check if the image matches any shop product."
+                            print(f"📸 URL Photo context: {photo_context}", flush=True)
+                    except Exception:
+                        pass
+                    break
+    
     # ── 7. Save to history ──
     hist_msg = user_msg if user_msg else ("[Voice Message]" if any("audio" in p.get("mime_type","") for p in media_parts) else ("[Photo]" if media_parts else "[Voice/Image/Payload]"))
     await add_to_history(shop_doc_id, conv_id, "Customer", hist_msg, max_len=10)
