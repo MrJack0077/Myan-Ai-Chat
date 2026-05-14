@@ -85,7 +85,7 @@ export const saveItem = async (shopId: string, item: Partial<VendorItem>, skipCa
     embedding = item.embedding && item.embedding.length > 0 ? item.embedding : undefined;
   }
 
-  const itemId = item.id || (item.name ? item.name.toLowerCase().replace(/\\s+/g, '_') : Math.random().toString(36).substring(7));
+  const itemId = item.id || (item.name ? item.name.toLowerCase().replace(/[\\s]+/g, '_').replace(/[^a-z0-9_]/g, '').substring(0, 50) : Math.random().toString(36).substring(7));
   const docRef = doc(db, 'shops', shopId, 'items', itemId);
 
   const finalItem = { 
