@@ -144,8 +144,8 @@ async def handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token
         missing.append("total_price")
     
     if missing:
-        print(f"⚠️ Order validation FAILED — missing: {', '.join(missing)}. Not saving.", flush=True)
-        return  # Don't save incomplete orders
+        print(f"⚠️ Order validation warnings — missing: {', '.join(missing)}. Saving anyway.", flush=True)
+        # Still save — don't block the order, just log warnings
     
     print(f"✅ Order validation PASSED — saving order for {name}", flush=True)
     

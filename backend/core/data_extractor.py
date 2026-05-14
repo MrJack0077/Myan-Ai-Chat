@@ -234,6 +234,9 @@ def update_nested_profile(prof, updates):
     if "items" in updates: 
         if isinstance(updates["items"], list):
             prof["current_order"]["items"] = updates["items"]
+    if "total_price" in updates: prof["current_order"]["total_price"] = updates["total_price"]
+    if "deli_charge" in updates: prof["current_order"]["deli_charge"] = updates["deli_charge"]
+    if "payment_slip_url" in updates: prof["current_order"]["payment_slip_url"] = updates["payment_slip_url"]
     
     # Dynamics
     if "current_intent" in updates: prof["dynamics"]["current_intent"] = updates["current_intent"]
