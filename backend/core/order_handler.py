@@ -126,6 +126,14 @@ async def handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token
     items_str = ", ".join(items_list)
     total_price = curr.get('total_price', 0)
     
+    print(f"🔍 ORDER SAVE DEBUG:", flush=True)
+    print(f"   name: '{ident.get('name', '')}'", flush=True)
+    print(f"   phone: '{ident.get('phone', '')}'", flush=True)
+    print(f"   address: '{curr.get('address', '')}'", flush=True)
+    print(f"   items: {items_list}", flush=True)
+    print(f"   total_price: {total_price}", flush=True)
+    print(f"   payment: {curr.get('payment_method', '')}", flush=True)
+    
     # ── Validation: ensure order has minimum required fields ──
     missing = []
     name = (ident.get('name') or '').strip()
