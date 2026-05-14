@@ -23,7 +23,7 @@ _vertex_available = False
 try:
     import vertexai
     project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "myanaichat")
-    location = os.getenv("VERTEX_AI_LOCATION", "us-central1")
+    location = os.getenv("VERTEX_AI_LOCATION", "us-east4")
     vertexai.init(project=project_id, location=location)
     _vertex_available = True
     print(f"✅ Vertex AI initialized: {project_id}/{location}")
