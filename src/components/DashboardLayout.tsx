@@ -134,7 +134,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         body: JSON.stringify({ redis: true, firestore_customers: true, firestore_semantic: true })
       });
       showToast("All cache & memory cleared! Fresh start.", "success");
-      setTimeout(() => window.location.reload(), 1500);
+      setTimeout(() => {
+        window.location.href = window.location.pathname + window.location.search;
+      }, 1000);
     } catch (err) {
       showToast("Failed to clear all.", "error");
     } finally {
