@@ -150,6 +150,20 @@ async def process_core_logic(data):
         await log_shop_analytics(shop_doc_id, "rate_limit_exceeded", {"user_id": user_id})
         return
 
+    # ── Plan Limit Check ──
+    from .plan_enforcer import check_limits, get_plan, send_limit_alert
+    shop_full = shop.get("shop_info", {})
+    plan = get_plan(shop_full)
+    subscriber_count = len(list(db.collection("shops").document(shop_doc_id).collection("customers").limit(plan["subscriber_limit"] + 1).get()))
+    channel_count = len(shop_full.get("sendpulseBots", []))
+    
+    allowed, limit_msg, limit_type, plan_info = check_limits(shop_full, subscriber_count, channel_count, 0, lang)
+    if not allowed:
+        print(f"🛑 Plan limit reached: {limit_type}", flush=True)
+        await send_sendpulse_messages(acc_id, user_id, {}, limit_msg, token)
+        await send_limit_alert(db, shop_doc_id, limit_type, plan_info, lang)
+        return
+
     token = await get_sendpulse_token(shop.get('client_id'), shop.get('client_secret'))
     if not token:
         print(f"❌ Token failed for bot: {acc_id}", flush=True)
@@ -440,6 +454,19 @@ async def process_core_logic(data):
         save_to_semantic_cache_async(shop_doc_id, user_msg, reply_text, msg_emb, intent_type, final_data)
 
     await increment_shop_tokens(acc_id, total_tokens)
+    
+    # ── Track tokens for plan limit ──
+    try:
+        current_used = shop_full.get("tokens_used", 0)
+        db.collection("shops").document(shop_doc_id).update({
+            "tokens_used": current_used + total_tokens,
+            "token_reset_date": shop_full.get("token_reset_date", "")
+        })
+        # Warn at 80%
+        if plan_info.get("token_limit") and (current_used + total_tokens) >= plan_info["token_limit"] * 0.8:
+            print(f"⚠️ Token usage at {(current_used+total_tokens)/plan_info['token_limit']*100:.0f}%", flush=True)
+    except Exception:
+        pass
     
     # Release per-user sequential lock
     await _release_user_lock(user_id)

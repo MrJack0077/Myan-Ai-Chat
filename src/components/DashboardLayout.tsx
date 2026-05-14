@@ -27,6 +27,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { useToast } from './Toast';
+import { useShop } from '../features/shop/hooks/useShop';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
