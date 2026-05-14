@@ -108,16 +108,40 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
     # Save extracted data to profile (using nested helper)
     update_nested_profile(prof, final_data.get("extracted", {}))
     extracted = final_data.get("extracted", {})
-    if not extracted or not extracted.get("name"):
-        # ⚠️ AI didn't extract data — try keyword-based fallback
-        print(f"⚠️ No extracted data from AI — trying keyword fallback", flush=True)
-        import re
-        kw_name = re.search(r'name.*?([A-Za-z\u1000-\u109F\s]{2,20})', user_msg, re.IGNORECASE)
-        kw_phone = re.search(r'(09\d{7,9}|\+?959\d{7,9})', user_msg)
-        if kw_name and not prof["identification"].get("name"):
-            prof["identification"]["name"] = kw_name.group(1).strip()
-        if kw_phone and not prof["identification"].get("phone"):
-            prof["identification"]["phone"] = kw_phone.group(1)
+    
+    # ── Keyword-based extraction (runs ALWAYS, fills gaps from AI) ──
+    import re
+    msg_lower = user_msg.lower()
+    
+    # Name patterns (Myanmar + English)
+    if not prof["identification"].get("name"):
+        name_pats = [
+            r'(?:name|နာမည်|အမည်)[\s:：]*([A-Za-z\u1000-\u109F\s]{2,25})',
+            r'(?:ကို|မောင်|မ|မမ|ဦး|ဒေါ်|ကိုကို|မမ)\s*([A-Za-z\u1000-\u109F]{2,20})',
+        ]
+        for pat in name_pats:
+            m = re.search(pat, user_msg, re.IGNORECASE)
+            if m and len(m.group(1).strip()) >= 2:
+                prof["identification"]["name"] = m.group(1).strip()
+                print(f"🔑 Extracted name: {prof['identification']['name']}", flush=True)
+                break
+    
+    # Phone (Myanmar format)
+    if not prof["identification"].get("phone"):
+        pm = re.search(r'(09\d{7,9}|\+?959\d{7,9})', user_msg)
+        if pm:
+            prof["identification"]["phone"] = pm.group(1)
+            print(f"🔑 Extracted phone: {prof['identification']['phone']}", flush=True)
+    
+    # Address
+    if not prof["current_order"].get("address"):
+        am = re.search(r'(?:address|လိပ်စာ|နေရပ်)[\s:：]*(.+?)(?:\.|$|\n)', user_msg, re.IGNORECASE)
+        if am and len(am.group(1).strip()) >= 5:
+            prof["current_order"]["address"] = am.group(1).strip()
+            print(f"🔑 Extracted address", flush=True)
+    
+    if not extracted:
+        print(f"⚠️ No extracted data from AI — using keyword extraction only", flush=True)
     await save_profile(shop_doc_id, user_id, prof)
 
     return final_data, total_tokens

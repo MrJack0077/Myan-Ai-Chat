@@ -17,7 +17,7 @@ async def call_agent_model(base_model_name, sys_inst, contents, response_schema,
         )
         res = await asyncio.wait_for(
             model.generate_content_async(contents=contents, generation_config=gen_config),
-            timeout=12.0
+            timeout=20.0
         )
     except asyncio.TimeoutError:
         print(f"⏰ AI call timed out after 12s — using fallback", flush=True)
