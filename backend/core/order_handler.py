@@ -235,16 +235,12 @@ async def handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token
                         print(f"📦 Stock reduced (count): {matched_data.get('name')} {current_stock}→{new_stock}", flush=True)
                     
                     elif stock_type == "status":
-                        # Status-based stock → just set unavailable if qty exceeds
-                        current_qty = matched_data.get("stock_quantity", 1)
-                        new_qty = max(0, current_qty - item_qty)
-                        matched_doc.reference.update({
-                            "stock_quantity": new_qty,
-                            "is_available": new_qty > 0,
-                            "updated_at": datetime.now(timezone.utc).isoformat()
-                        })
-                        status = "❌ Unavailable" if new_qty <= 0 else "✅ Available"
-                        print(f"📦 Stock updated (status): {matched_data.get('name')} → {status}", flush=True)
+                        # Status-based stock → DON'T reduce, just check available
+                        is_avail = matched_data.get("is_available", True)
+                        if is_avail:
+                            print(f"📦 Stock check (status): {matched_data.get('name')} ✅ Available — no reduce", flush=True)
+                        else:
+                            print(f"⚠️ Stock check (status): {matched_data.get('name')} ❌ Unavailable!", flush=True)
                     
                     else:
                         # Unknown type — default to count
