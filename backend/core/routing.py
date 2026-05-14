@@ -14,11 +14,12 @@ from .data_extractor import update_nested_profile
 async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, media_parts,
                           tool_info, currency, policies, delivery_info, payment_info, attachments,
                           should_bypass, shop_doc_id, user_id, lang, intent_type,
-                          automation_reply=""):
+                          automation_reply="", photo_context=""):
     """Select and run the appropriate AI agent, return (final_data, total_tokens).
     
     automation_reply: AI-generated reply from automation agent (may be used for
     OUT_OF_DOMAIN and other simple intents instead of hardcoded messages).
+    photo_context: Pre-analyzed image context (payment slip / product match).
     """
     is_inquiry = intent_type in ["PRODUCT_INQUIRY", "DELIVERY", "PAYMENT", "POLICY_FAQ"]
 
@@ -52,7 +53,7 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
             prof["dynamics"]["order_state"] = final_data["intent"]
     elif media_parts and intent_type not in ["ORDER", "START_ORDER"]:
         print("   - Selected: MEDIA_AGENT (photo/voice analysis)")
-        final_data = await run_media_agent(user_msg, tool_info, ai_config, policies, prof, BASE_MODEL_NAME, chat_history, media_parts, delivery_info, payment_info, shop_doc_id=shop_doc_id)
+        final_data = await run_media_agent(user_msg, tool_info, ai_config, policies, prof, BASE_MODEL_NAME, chat_history, media_parts, delivery_info, payment_info, shop_doc_id=shop_doc_id, photo_context=photo_context)
     elif order_state == "NONE" and should_bypass:
         print("   - Selected: ORDER_AGENT (bypass)")
         prof["dynamics"]["order_state"] = "COLLECTING"

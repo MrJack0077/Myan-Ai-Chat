@@ -180,3 +180,75 @@ async def expire_order_state(prof, shop_doc_id, user_id, max_age_seconds=10800):
         print(f"Date parsing error: {e}")
 
     return order_state
+
+
+# ── Memory & Preference Functions ──
+
+def build_memory_context(prof: dict) -> str:
+    """Build rich memory context for AI prompt: segment, preferences, purchases."""
+    sales = prof.get("sales_data", {})
+    insights = prof.get("ai_insights", {})
+    
+    parts = []
+    
+    segment = sales.get("segment", "NEW")
+    total_orders = sales.get("total_orders", 0)
+    total_spent = sales.get("total_spent", 0)
+    
+    if segment == "VIP":
+        parts.append(f"⭐ VIP Customer — {total_orders} orders, {total_spent} MMK. Give priority service.")
+    elif segment == "RETURNING":
+        parts.append(f"🔄 Returning Customer — {total_orders} orders. Welcome back warmly, reference past purchases.")
+    elif segment == "NEW" and total_orders == 0:
+        parts.append("🆕 New Customer — Be extra welcoming, explain how to order.")
+    
+    preferences = insights.get("preferences", {})
+    if preferences:
+        pref_parts = []
+        for k, v in preferences.items():
+            if isinstance(v, list) and v:
+                pref_parts.append(f"{k}: {', '.join(str(x) for x in v[:3])}")
+            elif isinstance(v, (str, int, float)) and v:
+                pref_parts.append(f"{k}: {v}")
+        if pref_parts:
+            parts.append(f"🎯 Preferences: {'; '.join(pref_parts)}")
+    
+    past = sales.get("past_purchases", [])
+    if past and isinstance(past, list) and len(past) > 0:
+        last = past[-1] if isinstance(past[-1], dict) else None
+        if last:
+            items = last.get("items", [])
+            item_names = [i.get("name", i) if isinstance(i, dict) else str(i) for i in items[:3]]
+            if item_names:
+                parts.append(f"🛒 Last Purchase: {', '.join(item_names)} — mention naturally if relevant.")
+    
+    summary = insights.get("conversation_summary", "")
+    if summary:
+        parts.append(f"📝 Previous Chat: {summary[:200]}")
+    
+    tags = insights.get("tags", [])
+    if tags:
+        parts.append(f"🏷️ Tags: {', '.join(tags[:5])}")
+    
+    return "\n".join(parts)
+
+
+def update_customer_preferences(prof: dict, extracted_prefs: dict):
+    """Merge extracted preferences into customer profile."""
+    if not extracted_prefs:
+        return
+    current = prof.get("ai_insights", {}).get("preferences", {})
+    if not isinstance(current, dict):
+        current = {}
+    for key, value in extracted_prefs.items():
+        if isinstance(value, list):
+            existing = current.get(key, [])
+            if not isinstance(existing, list):
+                existing = []
+            for v in value:
+                if v not in existing:
+                    existing.append(v)
+            current[key] = existing[:10]
+        elif isinstance(value, (str, int, float)):
+            current[key] = value
+    prof["ai_insights"]["preferences"] = current

@@ -593,9 +593,15 @@ def build_user_prompt(user_msg, profile=None, chat_history=None, tool_info=None)
             parts.append(conv_ctx)
 
     if tool_info:
-        # Trim tool_info to reduce prompt size (max 1000 chars)
-        trimmed_tool = tool_info[:1000] + ("..." if len(tool_info) > 1000 else "")
-        parts.append(f"[Product Database]\n{trimmed_tool}")
+        # Smart trim: keep only top 3 products + cross-sell hint
+        lines = tool_info.strip().split('\n')
+        if len(lines) > 4:
+            # Keep first 3 product lines + add cross-sell suggestion
+            trimmed = '\n'.join(lines[:3])
+            trimmed += f"\n💡 Also available: {len(lines)-3} more products. Suggest relevant cross-sells naturally."
+            parts.append(f"[Product Database]\n{trimmed}")
+        else:
+            parts.append(f"[Product Database]\n{tool_info}")
 
     parts.append(f"Customer Message: {user_msg}")
     return "\n\n".join(parts)

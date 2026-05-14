@@ -21,14 +21,19 @@ class MediaAgentResponse(typing_extensions.TypedDict):
     candidate_tokens: int
 
 
-async def run_media_agent(user_msg, tool_info, ai_cfg, policies, profile, base_model_name, chat_history, media_parts, delivery_info=None, payment_info=None, shop_doc_id=None):
+async def run_media_agent(user_msg, tool_info, ai_cfg, policies, profile, base_model_name, chat_history, media_parts, delivery_info=None, payment_info=None, shop_doc_id=None, photo_context=""):
     ident = profile.get("identification", {})
     dynamics = profile.get("dynamics", {})
     
     extra_ctx = [
         f"[DATABASE INFO]\n{tool_info}",
         f"[CUSTOMER STATE]\nName: {ident.get('name', '')} | OrderState: {dynamics.get('order_state', 'NONE')}",
-        "[MEDIA RULES]\n"
+    ]
+    
+    if photo_context:
+        extra_ctx.append(f"[PHOTO ANALYSIS]\n{photo_context}")
+    
+    extra_ctx.extend([
         "- IMAGE (photo of product): Look carefully at the image. Identify what the customer sent.\n"
         "  Match against [DATABASE INFO]. If found → describe the item naturally (name, price, features).\n"
         "  If NOT in database → politely say 'ဒီပစ္စည်းကို ကျွန်မတို့ဆိုင်မှာ မတွေ့ပါဘူးရှင့်။ တခြားပစ္စည်းတွေကြည့်ချင်ပါသလား။'\n"

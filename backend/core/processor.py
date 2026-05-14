@@ -206,7 +206,15 @@ async def process_core_logic(data):
 
     # ── 6. Download media ──
     media_parts = await download_media_parts(attachments)
-
+    
+    # ── 6b. Smart Photo Analysis ──
+    photo_context = ""
+    if attachments or media_parts:
+        from agents.photo_analyzer import analyze_photo_context
+        photo_context = await analyze_photo_context(shop_doc_id, user_msg, order_state, len(attachments or []))
+        if photo_context:
+            print(f"📸 Photo Analysis: {photo_context[:80]}...", flush=True)
+    
     # ── 7. Save to history ──
     hist_msg = user_msg if user_msg else ("[Voice Message]" if any("audio" in p.get("mime_type","") for p in media_parts) else ("[Photo]" if media_parts else "[Voice/Image/Payload]"))
     await add_to_history(shop_doc_id, conv_id, "Customer", hist_msg, max_len=10)
@@ -258,7 +266,7 @@ async def process_core_logic(data):
     if fast_intent and fast_intent not in ("COMPLAINT_OR_HUMAN",):
         print(f"⚡ SMART SKIP: fast_intent={fast_intent} — skipping Automation Agent", flush=True)
     else:
-        # No keyword match → default to PRODUCT_INQUIRY, let product agent handle it
+        # No keyword match → try Automation Agent with 5s timeout for better intent
         fast_intent = "PRODUCT_INQUIRY"
         print(f"⚡ SMART SKIP: no keyword → default={fast_intent} — skipping Automation Agent", flush=True)
     
@@ -282,17 +290,20 @@ async def process_core_logic(data):
     # ── 10. Semantic Cache ──
     cached_reply = await check_semantic_cache(shop_doc_id, user_msg, msg_emb, intent_type, order_state, acc_id)
 
-    # ── 11. Preference & Tag Extraction ──
+    # ── Preference Extraction (from keyword classifier tags) ──
     extracted_prefs = automation_data.get("extracted_preferences", {})
     behavioral_tags = automation_data.get("behavioral_tags", [])
     if extracted_prefs or behavioral_tags:
-        # Update preferences in insights
+        # Update structured preferences in profile
+        from .profile_manager import update_customer_preferences
+        if extracted_prefs:
+            update_customer_preferences(prof, extracted_prefs)
+        
         current_prefs = prof["ai_insights"].get("preferences", {})
         if isinstance(current_prefs, dict) and isinstance(extracted_prefs, dict):
             current_prefs.update(extracted_prefs)
             prof["ai_insights"]["preferences"] = current_prefs
         
-        # Update tags in insights
         current_tags = prof["ai_insights"].get("tags", [])
         if isinstance(current_tags, list) and isinstance(behavioral_tags, list):
             for tag in behavioral_tags:
@@ -301,6 +312,13 @@ async def process_core_logic(data):
             prof["ai_insights"]["tags"] = current_tags
             
         await save_profile(shop_doc_id, user_id, prof)
+    
+    # Build memory context for AI prompt
+    from .profile_manager import build_memory_context
+    memory_ctx = build_memory_context(prof)
+    if memory_ctx:
+        # Prepend memory context to user message so AI has context
+        user_msg = f"[CUSTOMER MEMORY]\n{memory_ctx}\n\n{user_msg}"
 
     # ── 12. Escalation ──
     if is_complex or intent_type == "COMPLAINT_OR_HUMAN":
@@ -335,7 +353,8 @@ async def process_core_logic(data):
             media_parts, tool_info, currency, policies,
             delivery_info, payment_info, attachments,
             should_bypass, shop_doc_id, user_id, lang,
-            intent_type, automation_reply=reply_text
+            intent_type, automation_reply=reply_text,
+            photo_context=photo_context
         )
         reply_text = final_data.get("reply", "...")
         is_complex = final_data.get("is_complex", False)
