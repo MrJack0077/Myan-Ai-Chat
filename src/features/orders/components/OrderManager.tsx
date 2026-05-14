@@ -512,12 +512,12 @@ export default function OrderManager({ shopId, currency = 'MMK' }: { shopId: str
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-zinc-50 border-b border-zinc-100">
-                  <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">{t('orders.order_id')}</th>
-                  <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">{t('orders.customer')}</th>
-                  <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">{t('orders.date')}</th>
-                  <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">{t('orders.total')}</th>
-                  <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">{t('orders.status')}</th>
-                  <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider text-right">{t('common.actions')}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-zinc-500 uppercase tracking-wider">{t('orders.order_id')}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-zinc-500 uppercase tracking-wider">{t('orders.customer')}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-zinc-500 uppercase tracking-wider">Items</th>
+                  <th className="px-4 py-3 text-xs font-bold text-zinc-500 uppercase tracking-wider">{t('orders.total')}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-zinc-500 uppercase tracking-wider">{t('orders.status')}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-zinc-500 uppercase tracking-wider text-right">{t('common.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -537,22 +537,31 @@ export default function OrderManager({ shopId, currency = 'MMK' }: { shopId: str
                 ) : (
                   filteredOrders.map((order) => (
                     <tr key={order.id} className="hover:bg-zinc-50 transition-all group">
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-mono font-bold text-zinc-900">#{order.id.slice(-6).toUpperCase()}</span>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-mono font-bold text-zinc-900">#{order.id.slice(-6).toUpperCase()}</span>
+                        <p className="text-[10px] text-zinc-400">{new Date(order.createdAt).toLocaleDateString()}</p>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-3">
                         <div>
                           <p className="text-sm font-bold text-zinc-900">{order.customerName}</p>
                           <p className="text-xs text-zinc-500">{order.customerPhone}</p>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <p className="text-sm text-zinc-600">{new Date(order.createdAt).toLocaleDateString()}</p>
+                      <td className="px-4 py-3">
+                        <p className="text-xs text-zinc-700 font-medium">
+                          {Array.isArray(order.items) ? order.items.slice(0, 2).join(', ') : String(order.items || '-')}
+                        </p>
+                        {(order as any).item_qty > 1 && (
+                          <span className="text-[10px] text-indigo-600 font-bold">x{(order as any).item_qty}</span>
+                        )}
                       </td>
-                      <td className="px-6 py-4">
-                        <p className="text-sm font-bold text-zinc-900">{symbol}{(order.total_price || order.totalAmount).toFixed(2)}</p>
+                      <td className="px-4 py-3">
+                        <p className="text-sm font-bold text-zinc-900">{symbol}{(order.total_price || order.totalAmount).toLocaleString()}</p>
+                        {(order as any).deli_charge > 0 && (
+                          <p className="text-[10px] text-zinc-400">+{symbol}{(order as any).deli_charge} delivery</p>
+                        )}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-3">
                         <span className={cn(
                           "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border uppercase tracking-wider",
                           getStatusColor(order.status)
