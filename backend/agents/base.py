@@ -21,20 +21,28 @@ async def call_agent_model(base_model_name, sys_inst, contents, response_schema,
         try:
             from vertexai.generative_models import GenerativeModel, GenerationConfig
             model = GenerativeModel(base_model_name, system_instruction=sys_inst)
-            gen_config = GenerationConfig(
-                response_mime_type="application/json",
-                response_schema=response_schema,
-                temperature=temperature,
-            )
+            try:
+                gen_config = GenerationConfig(
+                    response_mime_type="application/json",
+                    response_schema=response_schema,
+                    temperature=temperature,
+                )
+            except Exception:
+                # Vertex AI might not support response_schema — try without
+                gen_config = GenerationConfig(
+                    response_mime_type="application/json",
+                    temperature=temperature,
+                )
             res = await asyncio.wait_for(
                 model.generate_content_async(contents=contents, generation_config=gen_config),
                 timeout=20.0
             )
-            clean_json = re.sub(r'```json\n|\n```|```', '', res.text).strip()
-            data = json.loads(clean_json)
+            clean_json = re.sub(r'```json\n|\n```|```', '', str(res.text)).strip()
+            data = json.loads(clean_json) if clean_json else {}
+            um = res.usage_metadata
             tokens = {
-                "prompt_tokens": res.usage_metadata.prompt_token_count if res.usage_metadata else 0,
-                "candidate_tokens": res.usage_metadata.candidates_token_count if res.usage_metadata else 0,
+                "prompt_tokens": um.prompt_token_count if um else 0,
+                "candidate_tokens": um.candidates_token_count if um else 0,
             }
             return data, tokens
         except asyncio.TimeoutError:
