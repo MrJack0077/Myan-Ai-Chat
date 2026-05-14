@@ -189,7 +189,12 @@ export const updateShopAIConfig = async (shopId: string, config: ShopAIConfig) =
 };
 
 export const generateEmbedding = async (text: string, retries = 5, delay = 5000): Promise<number[]> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const geminiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  if (!geminiKey) {
+    console.warn('[generateEmbedding] No GEMINI API key found');
+    throw new Error('GEMINI_API_KEY not configured');
+  }
+  const ai = new GoogleGenAI({ apiKey: geminiKey });
   try {
     const result = await ai.models.embedContent({
       model: 'gemini-embedding-2-preview',
