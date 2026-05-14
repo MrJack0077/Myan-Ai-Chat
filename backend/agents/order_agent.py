@@ -1,8 +1,29 @@
 import json
 import time
+import re
 import typing_extensions
 from .base import call_agent_model, merge_tokens, make_fallback_response
 from core.prompt_builder import assemble_system_prompt, build_user_prompt
+
+
+def validate_order_data(extracted: dict) -> list[str]:
+    """Validate extracted order fields. Returns list of issues (empty = valid)."""
+    issues = []
+    name = (extracted.get("name") or "").strip()
+    phone = (extracted.get("phone") or "").strip()
+    address = (extracted.get("address") or "").strip()
+    
+    if name and len(name) < 2:
+        issues.append(f"name too short: '{name}'")
+    if phone:
+        # Myanmar phone: 09/+959, 9-11 digits
+        clean = re.sub(r'[\s\-\(\)]', '', phone)
+        if not re.match(r'^(09|\+?959)\d{7,9}$', clean):
+            issues.append(f"invalid phone: '{phone}'")
+    if address and len(address) < 5:
+        issues.append(f"address too short: '{address}'")
+    
+    return issues
 
 
 class ExtractedOrderData(typing_extensions.TypedDict, total=False):
@@ -80,6 +101,10 @@ async def run_order_agent(user_msg, profile, ai_cfg, base_model_name, chat_histo
             temperature=0.1,
         )
         print(f"⏱️  Order Agent AI: {(time.time()-t_ai):.2f}s | prompt={tokens.get('prompt_tokens',0)} tokens", flush=True)
+        # Validate extracted data
+        issues = validate_order_data(data.get("extracted", {}))
+        if issues:
+            print(f"⚠️ Order validation warnings: {', '.join(issues)}", flush=True)
         return merge_tokens(data, tokens)
     except Exception as e:
         print(f"🔥 Order Agent Error: {e}")

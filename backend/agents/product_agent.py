@@ -30,11 +30,17 @@ async def run_product_agent(user_msg, tool_info, ai_cfg, policies, profile, base
 
     constraints = ai_cfg.get('constraints', [])
     constraints_str = "\n".join(f"- {c}" for c in constraints) if constraints else "- No special constraints."
+    
+    # Format payment & delivery for prompt
+    pmt_methods = ", ".join(p.get('type', 'Unknown') for p in payment_info) if payment_info else "Cash"
+    deli_text = "\n".join(f"- {d.get('region','')}: {d.get('amount',0)} MMK ({d.get('estimatedDays','')} days)" for d in delivery_info) if delivery_info else "Standard delivery"
 
     extra_ctx = [
         f"[STRICT CONSTRAINTS]\n{constraints_str}",
         f"[DATABASE INFO]\n{tool_info}",
         f"[PAST PURCHASES]\nPast Purchases: {past_purchases if past_purchases else 'None'}",
+        f"[PAYMENT METHODS]\n{pmt_methods}",
+        f"[DELIVERY INFO]\n{deli_text}",
         "[AGENT RULES — FOLLOW STRICTLY]\n"
         "🚫 CRITICAL: NEVER make up products. ONLY describe items that exist in [DATABASE INFO] above.\n"
         "   If customer asks about 'Smart Switch', 'Smart Bulb', or any product NOT in the list:\n"

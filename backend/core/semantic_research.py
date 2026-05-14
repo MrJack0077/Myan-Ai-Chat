@@ -29,7 +29,7 @@ async def run_embedding_search(user_msg, shop_doc_id, currency):
             print(f"Embedding API Error: {e}")
             return "No items", None
 
-        docs = await hybrid_search_items(shop_doc_id, user_msg, emb_res['embedding'], limit=5)
+        docs = await hybrid_search_items(shop_doc_id, user_msg, emb_res['embedding'], limit=10)
 
         if docs:
             res_list = []
