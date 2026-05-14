@@ -57,7 +57,6 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
         confirm_keywords = ['yes', 'ဟုတ်', 'confirm', 'ok', 'okay', 'အင်း', 'မှန်တယ်', 'ဟုတ်ကဲ့', 'မှာ', 'တင်ပေး', 'ယူမယ်']
         if any(kw in msg_lower for kw in confirm_keywords) and order_state in ["SUMMARY_SENT", "COLLECTING"]:
             has_data = (prof["identification"].get("name") and 
-                       prof["identification"].get("phone") and 
                        prof["current_order"].get("items"))
             if has_data:
                 print(f"🔔 Auto-detected confirmation keyword → forcing ORDER_CONFIRMED", flush=True)
@@ -167,6 +166,9 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
                     name_match = re.match(r'^([^|]+)', line)
                     if name_match:
                         product_name = name_match.group(1).strip()
+                        # Clean formatting junk from product name
+                        product_name = re.sub(r'^[📦🛒🛍️\s]+', '', product_name)
+                        product_name = re.sub(r'\s{2,}', ' ', product_name)
                         if product_name and len(product_name) >= 3:
                             prof["current_order"]["items"] = [product_name]
                             print(f"🔑 Auto-populated items: [{product_name}]", flush=True)

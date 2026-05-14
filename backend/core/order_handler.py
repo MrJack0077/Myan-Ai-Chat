@@ -142,8 +142,6 @@ async def handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token
     
     if not name or len(name) < 2:
         missing.append("name")
-    if not phone or len(phone) < 7:
-        missing.append("phone")
     if not address or len(address) < 5:
         missing.append("address")
     if not items_list or len(items_list) == 0:
