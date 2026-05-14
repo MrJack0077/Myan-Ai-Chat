@@ -309,15 +309,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   ? (isVendorPath ? t('common.vendor') : t('common.admin_portal')) 
                   : `${t('common.vendor')}: ${user?.shop?.name || 'My Shop'}`}
               </h1>
-              {isVendorPath && user?.shop?.plan && (
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  user.shop.plan === 'enterprise' ? 'bg-purple-100 text-purple-700' :
-                  user.shop.plan === 'premium' ? 'bg-amber-100 text-amber-700' :
-                  'bg-zinc-100 text-zinc-600'
-                }`}>
-                  {user.shop.plan.toUpperCase()}
-                </span>
-              )}
             </div>
           </div>
 

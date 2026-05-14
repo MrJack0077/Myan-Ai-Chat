@@ -43,7 +43,6 @@ export default function ShopCreateEditModal({ isOpen, onClose, mode, initialData
           sendpulseClientId: newShop.sendpulseClientId || undefined,
           sendpulseClientSecret: newShop.sendpulseClientSecret || undefined,
           agentId: newShop.agentId || undefined,
-          plan: newShop.plan || 'basic',
           disableCache: newShop.disableCache,
           databaseName: `db_${newShop.slug}`,
           vendorCredentials: {
@@ -67,7 +66,6 @@ export default function ShopCreateEditModal({ isOpen, onClose, mode, initialData
           sendpulseClientId: newShop.sendpulseClientId || undefined,
           sendpulseClientSecret: newShop.sendpulseClientSecret || undefined,
           agentId: newShop.agentId || undefined,
-          plan: newShop.plan || 'basic',
           disableCache: newShop.disableCache
         });
         showToast('Shop configuration updated', 'success');

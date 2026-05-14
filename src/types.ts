@@ -59,12 +59,6 @@ export interface ShopAIConfig {
     url?: string;
     updatedAt: string;
   }[];
-  plan?: 'basic' | 'premium' | 'enterprise';
-  subscriberLimit?: number;
-  channelLimit?: number;
-  tokenLimit?: number;
-  tokensUsed?: number;
-  tokenResetDate?: string;
 }
 
 export interface FAQ {
