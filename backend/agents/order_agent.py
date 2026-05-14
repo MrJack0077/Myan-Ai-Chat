@@ -43,6 +43,8 @@ async def run_order_agent(user_msg, profile, ai_cfg, base_model_name, chat_histo
         f"Deli={curr.get('deli_charge', 0)} {currency} | Total={curr.get('total_price', 0)} {currency}\n"
         f"OrderState={dynamics.get('order_state', 'NONE')} | Slip={'Yes' if curr.get('payment_slip_url') else 'No'}",
         "[ORDER FLOW]\n"
+        "🚫 CRITICAL: ONLY use products from [PRODUCT PRICES] above. Never make up items or prices.\n"
+        "   If customer asks about a product NOT in the list → say it's not available.\n"
         "1. Look at images — if payment slip, recognize as proof of payment.\n"
         "2. Confirm known info instead of re-asking (Name/Phone/Address).\n"
         "3. Ask missing info naturally one at a time: name → phone → address → payment.\n"
