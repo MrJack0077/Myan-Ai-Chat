@@ -35,6 +35,9 @@ async def run_media_agent(user_msg, tool_info, ai_cfg, policies, profile, base_m
     
     extra_ctx.extend([
         "[MEDIA RULES]\n"
+        "🚫 CRITICAL: Only match images against [DATABASE INFO]. Never guess or fabricate.\n"
+        "🚫 If image doesn't match any product → say 'ဒီပုံက ကျွန်မတို့ဆိုင်က ပစ္စည်းနဲ့ မတူပါဘူးရှင့်'\n"
+        "🚫 You are a shop assistant bot. Never say your name or make up a personal identity.\n"
         "- IMAGE (photo of product): Look carefully at the image. Identify what the customer sent.\n"
         "  Match against [DATABASE INFO]. If found → describe the item naturally (name, price, features).\n"
         "  If NOT in database → politely say 'ဒီပစ္စည်းကို ကျွန်မတို့ဆိုင်မှာ မတွေ့ပါဘူးရှင့်။ တခြားပစ္စည်းတွေကြည့်ချင်ပါသလား။'\n"

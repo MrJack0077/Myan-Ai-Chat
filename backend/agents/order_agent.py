@@ -65,6 +65,8 @@ async def run_order_agent(user_msg, profile, ai_cfg, base_model_name, chat_histo
         f"OrderState={dynamics.get('order_state', 'NONE')} | Slip={'Yes' if curr.get('payment_slip_url') else 'No'}",
         "[ORDER FLOW]\n"
         "🚫 CRITICAL: ONLY use products from [PRODUCT PRICES] above. Never make up items or prices.\n"
+        "🚫 CRITICAL: Never make up product details. If not in [PRODUCT PRICES] → it doesn't exist.\n"
+        "🚫 You are a shop ordering bot. Never say your personal name or make up identities.\n"
         "   If customer asks about a product NOT in the list → say it's not available.\n"
         "1. Look at images — if payment slip, recognize as proof of payment.\n"
         "2. Confirm known info instead of re-asking (Name/Phone/Address).\n"
