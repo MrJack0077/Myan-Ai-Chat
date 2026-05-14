@@ -27,14 +27,13 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
     is_service = prof.get("service_type") or intent_type == "SERVICE"
 
     if intent_type == "OUT_OF_DOMAIN":
-        print("   - Selected: OUT_OF_DOMAIN (Using AI reply)")
-        # Prefer AI's own words — only fallback to hardcoded if AI gave nothing
-        reply = automation_reply.strip() if automation_reply and len(automation_reply.strip()) > 10 else ""
-        if not reply:
-            if lang.lower() in ["myanmar", "burmese", "mm"]:
-                reply = "တောင်းပန်ပါတယ်ရှင့်။ ဒါက ကျွန်မတို့ shop နဲ့ သက်ဆိုင်တဲ့ အကြောင်းအရာ မဟုတ်လို့ ဖြေကြားပေးလို့ မရပါဘူးရှင်။ Product တွေနဲ့ပတ်သက်ပြီး မေးမြန်းချင်တာရှိရင်တော့ မေးမြန်းနိုင်ပါတယ်ရှင့်။"
-            else:
-                reply = "I'm sorry, but I can only answer questions related to our shop and products. If you have any product-related questions, feel free to ask!"
+        print("   - Selected: OUT_OF_DOMAIN (Hardcoded only — no AI)")
+        # NEVER use AI reply for out-of-domain — hardcoded only
+        # AI tends to fabricate stories like "I'm a shop employee named..."
+        if lang.lower() in ["myanmar", "burmese", "mm"]:
+            reply = "တောင်းပန်ပါတယ်ရှင့်။ ဒါက ကျွန်မတို့ shop နဲ့ သက်ဆိုင်တဲ့ အကြောင်းအရာ မဟုတ်လို့ ဖြေကြားပေးလို့ မရပါဘူးရှင်။ Product တွေနဲ့ပတ်သက်ပြီး မေးမြန်းချင်တာရှိရင်တော့ မေးမြန်းနိုင်ပါတယ်ရှင့်။"
+        else:
+            reply = "I'm sorry, but I can only answer questions related to our shop and products. If you have any product-related questions, feel free to ask!"
         final_data = {
             "is_complex": False, "intent": "OUT_OF_DOMAIN",
             "reply": reply,
