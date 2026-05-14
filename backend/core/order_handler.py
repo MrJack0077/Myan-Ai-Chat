@@ -199,6 +199,40 @@ async def handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token
         # Store order ID for reference
         saved_order_id = doc_ref.id
         
+        # ── Auto-reduce stock for each item ──
+        items_col = db.collection("shops").document(shop_doc_id).collection("items")
+        for item_name in items_list:
+            try:
+                # Find matching item by name
+                matching = items_col.where("name", "==", item_name).limit(1).get()
+                if len(matching) > 0:
+                    item_doc = matching[0]
+                    item_data = item_doc.to_dict()
+                    current_stock = item_data.get("stock_quantity", 0)
+                    new_stock = max(0, current_stock - item_qty)
+                    item_doc.reference.update({
+                        "stock_quantity": new_stock,
+                        "is_available": new_stock > 0,
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    })
+                    print(f"📦 Stock reduced: {item_name} {current_stock}→{new_stock}", flush=True)
+                else:
+                    # Try partial match
+                    all_items = items_col.limit(50).get()
+                    for doc in all_items:
+                        data = doc.to_dict()
+                        if item_name.lower() in (data.get("name", "") or "").lower():
+                            current_stock = data.get("stock_quantity", 0)
+                            new_stock = max(0, current_stock - item_qty)
+                            doc.reference.update({
+                                "stock_quantity": new_stock,
+                                "is_available": new_stock > 0
+                            })
+                            print(f"📦 Stock reduced (partial match): {data.get('name')} {current_stock}→{new_stock}", flush=True)
+                            break
+            except Exception as e:
+                print(f"⚠️ Stock reduce error for {item_name}: {e}", flush=True)
+        
         # Auto-invalidate cache after new order
         try:
             from .cache_manager import invalidate_shop_caches
