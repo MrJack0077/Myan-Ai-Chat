@@ -27,7 +27,7 @@ module.exports = {
     {
       name: 'frontend',
       script: 'server.ts',
-      interpreter: '../node_modules/.bin/tsx',
+      interpreter: 'node_modules/.bin/tsx',
       cwd: '..',
       
       autorestart: true,
