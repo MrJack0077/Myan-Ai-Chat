@@ -384,7 +384,7 @@ async def process_core_logic(data):
                 reply_text = "How can I help you today?"
         final_data["reply"] = reply_text
         print(f"⚠️ Empty AI reply → using fallback for intent={intent_type}", flush=True)
-        print(f"⏱️  [6] Agent Routing (product/order/media): {(time.time()-t_agent):.2f}s", flush=True)
+        print(f"⏱️  [6] Reply fallback: handled", flush=True)
 
     # ── 14. Response & Save ──
     await add_to_history(shop_doc_id, conv_id, "AI", reply_text, max_len=10)

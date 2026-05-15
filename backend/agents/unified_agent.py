@@ -4,15 +4,9 @@ Single-Pass Unified Agent — ONE AI call for intent + reply + extraction.
 Replaces: Greeting Router + Automation Agent + Product/Order/Media/Service agents.
 Reduces AI calls from 2-4 to 1 per message.
 Error points from 9 to 3.
-
-Output: {
-    "intent": "PRODUCT_INQUIRY|ORDER|GREETING|...",
-    "reply": "Customer-facing text in their language",
-    "is_complex": bool,
-    "extracted": {name, phone, items, payment_method, buttons, images},
-    "reasoning": "Brief internal reasoning"
-}
 """
+import asyncio
+import asyncio
 import json
 import re
 import time
