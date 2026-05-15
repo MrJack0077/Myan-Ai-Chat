@@ -135,8 +135,8 @@ async def push_to_queue(payload):
         await _do_push(payload)
 
 async def debounced_process_buffer(user_id):
-    """Wait 4 seconds, collect all messages for user, and push one or more tasks."""
-    await asyncio.sleep(4)
+    """Wait 0 seconds (immediate processing), collect messages, push tasks."""
+    await asyncio.sleep(0)
     
     buffer_key = f"debounce_buffer:{user_id}"
     active_key = f"debounce_active:{user_id}"

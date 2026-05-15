@@ -86,11 +86,13 @@ async def run_automation_agent(user_msg, media_parts, chat_history, profile, ai_
 
     except Exception as e:
         print(f"🔥 Automation Agent Error: {e}", flush=True)
+        # Don't set intent=ERROR — that triggers unnecessary escalation.
+        # Instead, let keyword classifier handle it. is_complex=False prevents escalation.
         return {
             "reasoning": f"Error: {str(e)}",
-            "reply": "I'm having a bit of trouble processing that. Let me get a human to help.",
-            "intent": "ERROR",
-            "is_complex": True,
+            "reply": "",
+            "intent": "",  # ← Empty = let keyword classifier decide
+            "is_complex": False,  # ← Don't escalate unless keyword says so
             "internal_notes": str(e),
             "followup_needed": False,
             "followup_delay_hours": 0,
