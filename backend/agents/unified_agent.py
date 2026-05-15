@@ -124,13 +124,16 @@ async def run_unified_agent(
 
     t_start = time.time()
     try:
-        res = await model.generate_content_async(
-            contents=contents,
-            generation_config=GenerationConfig(
-                response_mime_type="application/json",
-                response_schema=UnifiedAgentResponse,
-                temperature=0.2,
+        res = await asyncio.wait_for(
+            model.generate_content_async(
+                contents=contents,
+                generation_config=GenerationConfig(
+                    response_mime_type="application/json",
+                    response_schema=UnifiedAgentResponse,
+                    temperature=0.2,
+                ),
             ),
+            timeout=8.0  # ⚡ 8s timeout — don't keep customer waiting
         )
         clean = re.sub(r'```json\n|\n```|```', '', str(res.text)).strip()
         data = json.loads(clean) if clean else {}

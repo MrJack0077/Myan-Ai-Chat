@@ -1,6 +1,6 @@
 """
 Main message processor — orchestrates the full pipeline:
-  Data extraction → Profile → Greeting router → Research → Agent → Response → Cache
+  Data extraction → Profile → Greeting → Research → Unified Agent → Response → Cache
 """
 import asyncio
 import time
@@ -13,8 +13,6 @@ from utils import (
     BASE_MODEL_NAME, FAST_MODEL_NAME,
     get_sendpulse_token,
 )
-from agents import run_automation_agent  # kept for backward compat, unified agent replaces it
-
 from .profile_manager import get_user_profile, save_profile, segment_customer, expire_order_state
 from .data_extractor import extract_text_deeply, extract_bot_id, extract_user_id, extract_attachments, download_media_parts
 from .greeting_router import run_greeting_router
@@ -27,7 +25,6 @@ from .conversation_memory import (
     MAX_RECENT_MESSAGES,
 )
 from .worker import task_queue
-from .routing import route_to_agent
 
 
 # Intent classifier and prompt cache extracted to separate modules:
