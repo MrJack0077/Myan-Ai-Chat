@@ -133,6 +133,12 @@ async def run_unified_agent(
         print(f"📋 Raw AI output ({len(clean)} chars): {clean[:200]}...", flush=True)
         data = json.loads(clean) if clean else {}
         
+        # ⚡ Normalize: AI sometimes returns "response" instead of "reply"
+        if "response" in data and not data.get("reply"):
+            data["reply"] = data.pop("response")
+        if "question" in data and not data.get("reply"):
+            data["reply"] = data.pop("question")
+        
         um = res.usage_metadata
         tokens = {
             "prompt_tokens": um.prompt_token_count if um else 0,

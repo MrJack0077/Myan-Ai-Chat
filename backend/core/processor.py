@@ -294,6 +294,16 @@ async def process_core_logic(data):
     extracted = unified_result.get("extracted", {})
     total_tokens = unified_result.get("prompt_tokens", 0) + unified_result.get("candidate_tokens", 0)
     
+    # ⚡ Intent override: keyword classifier is more reliable for basic intents
+    # AI tends to misclassify "hello" as PRODUCT_INQUIRY
+    if kw_intent and intent_type != kw_intent:
+        if kw_intent in ("GREETING",) and not reply_text:
+            # Keyword says greeting but AI didn't give reply → use hardcoded
+            from .greeting_router import _hardcoded_greeting_reply
+            reply_text = _hardcoded_greeting_reply(lang)
+            intent_type = "GREETING"
+            print(f"⚡ Intent fix: AI={intent_type} → kw={kw_intent}", flush=True)
+    
     print(f"⏱️  [5] Unified Agent done: {(time.time()-t5):.2f}s | intent={intent_type} | tokens={total_tokens}", flush=True)
     t6 = time.time()
 
