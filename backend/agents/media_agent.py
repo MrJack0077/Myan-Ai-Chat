@@ -69,6 +69,7 @@ async def run_media_agent(user_msg, tool_info, ai_cfg, policies, profile, base_m
             contents=contents,
             response_schema=MediaAgentResponse,
             temperature=0.2,
+            shop_doc_id=shop_doc_id,
         )
         return merge_tokens(data, tokens)
     except Exception as e:

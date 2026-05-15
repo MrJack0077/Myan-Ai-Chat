@@ -89,6 +89,7 @@ async def run_product_agent(user_msg, tool_info, ai_cfg, policies, profile, base
             contents=contents,
             response_schema=ProductAgentResponse,
             temperature=0.2,
+            shop_doc_id=shop_doc_id,
         )
         return merge_tokens(data, tokens)
     except Exception as e:

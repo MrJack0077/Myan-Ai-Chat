@@ -100,8 +100,7 @@ async def run_order_agent(user_msg, profile, ai_cfg, base_model_name, chat_histo
             base_model_name, sys_inst,
             contents=contents,
             response_schema=OrderAgentResponse,
-            temperature=0.1,
-        )
+            temperature=0.1,            shop_doc_id=shop_doc_id,        )
         print(f"⏱️  Order Agent AI: {(time.time()-t_ai):.2f}s | prompt={tokens.get('prompt_tokens',0)} tokens", flush=True)
         # Validate extracted data
         issues = validate_order_data(data.get("extracted", {}))

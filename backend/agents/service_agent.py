@@ -48,6 +48,7 @@ async def run_service_agent(user_msg, tool_info, ai_cfg, policies, profile, base
             contents=user_prompt,
             response_schema=ServiceAgentResponse,
             temperature=0.2,
+            shop_doc_id=shop_doc_id,
         )
         return merge_tokens(data, tokens)
     except Exception as e:
