@@ -24,9 +24,10 @@ except Exception as e:
     raise RuntimeError(f"Vertex AI is required: {e}")
 
 # ── Model Names (Vertex AI format — no 'models/' prefix) ──
-BASE_MODEL_NAME = os.getenv("BASE_MODEL_NAME", "gemini-2.5-flash-lite")
-FAST_MODEL_NAME = os.getenv("FAST_MODEL_NAME", "gemini-2.5-flash-lite")
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "text-embedding-004")
+# .strip() handles common .env mistake: "KEY = value" (spaces around =)
+BASE_MODEL_NAME = os.getenv("BASE_MODEL_NAME", "gemini-2.5-flash-lite").strip()
+FAST_MODEL_NAME = os.getenv("FAST_MODEL_NAME", "gemini-2.5-flash-lite").strip()
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "text-embedding-004").strip()
 
 
 sa_path = os.getenv("SERVICE_ACCOUNT_PATH")
