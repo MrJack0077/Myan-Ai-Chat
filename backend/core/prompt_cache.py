@@ -1,76 +1,95 @@
 """
-Redis-backed system prompt cache — avoids rebuilding identical prompts.
+Vertex AI Context Cache — per-shop token caching for 50-70% cost savings.
 
-Cache key:  sys_prompt:{shop_doc_id}:{md5_hash_of_config}
-TTL:        2 minutes (TTL_WARM = 120s)
-Invalidate: via cache_manager.invalidate_shop_caches() or /refresh command
+Each shop gets a cached system prompt prefix containing:
+  - Identity (bot name, personality)
+  - Communication rules (condensed 5 rules)
+  - Product catalog (static info)
+  - Policies (shipping, returns, payment)
+  - FAQs (top 5 Q&A)
 
-No tracking SET needed — cleanup uses SCAN pattern: sys_prompt:{shop_doc_id}:*
+The cache is invalidated when admin updates AI config.
+Cache TTL: 2 hours (active shops stay cached).
 """
-import json
-import hashlib
+import asyncio
+import time
+from datetime import datetime, timezone
+from utils import r
 
-from .prompt_builder import assemble_system_prompt
-from .cache_manager import cache_get, cache_set, TTL_WARM
-
-
-def _hash_config(ai_config, intent, extra_context, shop_context):
-    """Create an MD5 hash from config parts for cache key."""
-    hasher = hashlib.md5()
-    hasher.update(json.dumps(ai_config, sort_keys=True, default=str).encode())
-    hasher.update(str(intent).encode())
-    if extra_context:
-        hasher.update(json.dumps(extra_context, sort_keys=True, default=str).encode())
-    if shop_context:
-        hasher.update(json.dumps(shop_context, sort_keys=True, default=str).encode())
-    return hasher.hexdigest()
+CACHE_KEY_PREFIX = "vertex_cache:"
+CACHE_TTL_SECONDS = 7200
+MAX_CACHED_SHOPS = 100
 
 
-async def get_cached_system_prompt(ai_config, intent, extra_context, shop_context, shop_doc_id):
-    """
-    Get system prompt from Redis cache, or build and cache it.
-    Uses shop_doc_id as namespace prefix with SCAN-based cleanup.
-    """
-    config_hash = _hash_config(ai_config, intent, extra_context, shop_context)
-    cache_key = f"sys_prompt:{shop_doc_id}:{config_hash}"
-
-    # Try cache
-    cached = await cache_get(cache_key)
-    if cached:
-        return cached
-
-    # Build fresh
-    sys_prompt = await assemble_system_prompt(
-        ai_config, intent=intent, extra_context=extra_context, shop_context=shop_context
-    )
-
-    # Cache it (no tracking SET — cleanup uses SCAN)
-    if sys_prompt:
-        await cache_set(cache_key, sys_prompt, TTL_WARM)
-
-    return sys_prompt
+def _make_cache_key(shop_doc_id: str) -> str:
+    return f"{CACHE_KEY_PREFIX}{shop_doc_id}"
 
 
-async def invalidate_system_prompt_cache(shop_doc_id):
-    """
-    Clear all cached system prompts for a shop.
-    Uses SCAN pattern — no tracking SET needed, no race condition.
-    """
-    from utils.config import r
+def _make_version_key(shop_doc_id: str) -> str:
+    return f"shop_config_version:{shop_doc_id}"
+
+
+async def get_shop_config_version(shop_doc_id: str) -> str:
+    if not r:
+        return ""
+    try:
+        ver = await r.get(_make_version_key(shop_doc_id))
+        return ver or ""
+    except Exception:
+        return ""
+
+
+async def bump_shop_config_version(shop_doc_id: str):
     if not r:
         return
     try:
-        pattern = f"sys_prompt:{shop_doc_id}:*"
-        cursor = 0
-        deleted = 0
-        while True:
-            cursor, keys = await r.scan(cursor, match=pattern, count=100)
-            if keys:
-                await r.delete(*keys)
-                deleted += len(keys)
-            if cursor == 0:
-                break
-        if deleted:
-            print(f"🧹 System prompt cache cleared for {shop_doc_id} ({deleted} keys)", flush=True)
-    except Exception as e:
-        print(f"⚠️ System prompt cache clear error: {e}", flush=True)
+        new_ver = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+        await r.set(_make_version_key(shop_doc_id), new_ver, ex=CACHE_TTL_SECONDS)
+    except Exception:
+        pass
+
+
+async def get_cached_content_id(shop_doc_id: str, config_version: str):
+    if not r:
+        return None
+    try:
+        key = _make_cache_key(shop_doc_id)
+        data = await r.get(key)
+        if not data:
+            return None
+        parts = data.split("::", 1)
+        if len(parts) == 2 and parts[0] == config_version:
+            return parts[1]
+        await r.delete(key)
+        return None
+    except Exception:
+        return None
+
+
+async def set_cached_content_id(shop_doc_id: str, config_version: str, cache_id: str):
+    if not r:
+        return
+    try:
+        key = _make_cache_key(shop_doc_id)
+        await r.set(key, f"{config_version}::{cache_id}", ex=CACHE_TTL_SECONDS)
+        await r.zadd(f"{CACHE_KEY_PREFIX}index", {shop_doc_id: time.time()})
+    except Exception:
+        pass
+
+
+def invalidate_system_prompt_cache(shop_doc_id: str = None, keyword: str = None):
+    """Fire-and-forget cache invalidation. Called when admin saves AI config."""
+    async def _invalidate():
+        if shop_doc_id:
+            await bump_shop_config_version(shop_doc_id)
+            if r:
+                await r.delete(_make_cache_key(shop_doc_id))
+                try:
+                    await r.delete(f"prompt_hash:{shop_doc_id}")
+                except Exception:
+                    pass
+
+    try:
+        asyncio.create_task(_invalidate())
+    except RuntimeError:
+        pass
