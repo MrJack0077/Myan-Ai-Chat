@@ -253,9 +253,9 @@ async def process_core_logic(data):
     kw_intent, _ = fast_intent_classify(user_msg, order_state)
     is_likely_greeting = len(user_msg) <= 50 and not media_parts and not attachments
     
-    # If keyword classifier already knows this is a product inquiry/order, skip the 2-4s AI call
-    if is_likely_greeting and kw_intent not in ("GREETING",):
-        print(f"⚡ Greeting Router: SKIP (keyword={kw_intent}) — saving 2-4s", flush=True)
+    # If keyword classifier already detected ANY non-greeting intent, skip the expensive AI call
+    if is_likely_greeting and kw_intent and kw_intent not in ("GREETING",):
+        print(f"⚡ Greeting Router: SKIP (keyword={kw_intent}) — saving 2-15s", flush=True)
         is_likely_greeting = False
     
     if is_likely_greeting:
