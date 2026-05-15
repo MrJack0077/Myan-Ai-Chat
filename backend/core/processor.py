@@ -215,15 +215,24 @@ async def process_core_logic(data):
     
     # ── 6b. Smart Photo Analysis ──
     if attachments or media_parts:
-        try:
-            from agents.photo_analyzer import analyze_photo_context
-            photo_context = await analyze_photo_context(shop_doc_id, user_msg, order_state, len(attachments or []), media_parts)
-            if photo_context:
-                print(f"📸 Photo Analysis: {photo_context[:80]}...", flush=True)
-        except ImportError as e:
-            print(f"⚠️ Photo analyzer import failed (missing dependency?): {e}", flush=True)
-        except Exception as e:
-            print(f"⚠️ Photo analysis error: {e}", flush=True)
+        # Keyword quick check first (0ms) — detect payment slips without AI
+        import re as _re
+        slip_keywords = r'\b(slip|paid|payment|transfer|ငွေ|ပေးချေ|လွှဲ|ငွေလွှဲ|receipt|transaction)\b'
+        is_likely_slip = bool(_re.search(slip_keywords, user_msg, _re.IGNORECASE))
+        
+        if is_likely_slip:
+            photo_context = "[PAYMENT SLIP DETECTED] This appears to be a payment receipt. Process it as payment verification."
+            print(f"⚡ Photo Quick Check: Payment slip detected (keyword) — skipping AI Vision", flush=True)
+        else:
+            try:
+                from agents.photo_analyzer import analyze_photo_context
+                photo_context = await analyze_photo_context(shop_doc_id, user_msg, order_state, len(attachments or []), media_parts)
+                if photo_context:
+                    print(f"📸 Photo Analysis (AI Vision): {photo_context[:80]}...", flush=True)
+            except ImportError as e:
+                print(f"⚠️ Photo analyzer import failed: {e}", flush=True)
+            except Exception as e:
+                print(f"⚠️ Photo analysis error: {e}", flush=True)
     
     # ── 6c. URL Image Detection ──
     if not media_parts and not attachments:
@@ -305,16 +314,31 @@ async def process_core_logic(data):
         fast_intent = "PRODUCT_INQUIRY"
         print(f"⚡ SMART SKIP: no keyword → default={fast_intent} — skipping Automation Agent", flush=True)
     
+    # Re-enable Automation Agent with 5s timeout for preference extraction
+    print(f"⚡ Automation Agent: Calling with 5s timeout...", flush=True)
+    try:
+        auto_result = await asyncio.wait_for(
+            run_automation_agent(user_msg, media_parts, chat_history, prof, ai_config, shop_info_data, BASE_MODEL_NAME, shop_doc_id=shop_doc_id, tool_info=tool_info),
+            timeout=5.0
+        )
+        automation_data.update({
+            "intent": auto_result.get("intent", fast_intent),
+            "is_complex": auto_result.get("is_complex", False),
+            "reply": auto_result.get("reply", ""),
+            "extracted_preferences": auto_result.get("extracted_preferences", {}),
+            "behavioral_tags": auto_result.get("behavioral_tags", []),
+            "prompt_tokens": auto_result.get("prompt_tokens", 0),
+            "candidate_tokens": auto_result.get("candidate_tokens", 0),
+        })
+        print(f"✅ Automation Agent returned: intent={automation_data['intent']}", flush=True)
+    except asyncio.TimeoutError:
+        print(f"⏰ Automation Agent timed out — using keyword intent", flush=True)
+    except Exception as e:
+        print(f"⚠️ Automation Agent error: {e}", flush=True)
+    
     tool_info, msg_emb = research_result
-    automation_data = {
-        "intent": fast_intent,
-        "is_complex": False,
-        "reply": "",
-        "extracted_preferences": {},
-        "behavioral_tags": [],
-        "prompt_tokens": 0,
-        "candidate_tokens": 0,
-    }
+    if not automation_data.get("intent"):
+        automation_data["intent"] = fast_intent
 
     intent_type = automation_data.get("intent", "PRODUCT_INQUIRY")
     is_complex = automation_data.get("is_complex", False)
