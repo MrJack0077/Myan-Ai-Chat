@@ -217,13 +217,20 @@ async def process_core_logic(data):
     
     # ⚡ SKIP separate AI Vision — unified agent handles images directly (multimodal)
     if attachments or media_parts:
-        # Keyword quick check for payment slip (0ms)
-        import re as _re
-        slip_keywords = r'\b(slip|paid|payment|transfer|ငွေ|ပေးချေ|လွှဲ|ငွေလွှဲ|receipt|transaction)\b'
-        if bool(_re.search(slip_keywords, user_msg, _re.IGNORECASE)):
-            photo_context = "[PAYMENT SLIP DETECTED] Process as payment verification."
-            print(f"⚡ Payment slip detected (keyword) — unified agent will verify image", flush=True)
-        else:
+        # Try smart photo analysis (non-blocking)
+        try:
+            from agents.photo_analyzer import detect_payment_slip, match_product_photo
+            is_slip, slip_ctx = detect_payment_slip(user_msg, order_state)
+            if is_slip:
+                photo_context = slip_ctx
+            else:
+                # Try product matching
+                matched, product_ctx = await match_product_photo(shop_doc_id, user_msg)
+                if matched:
+                    photo_context = product_ctx
+                else:
+                    photo_context = "📸 Customer sent an image. Analyze it naturally with the message."
+        except Exception:
             photo_context = "📸 Customer sent an image. Analyze it naturally with the message."
     
     # ── 7. Save to history ──
@@ -251,14 +258,11 @@ async def process_core_logic(data):
         tool_info, msg_emb = research_result
         print(f"⏱️  Embedding Research: {(time.time()-t_research):.2f}s", flush=True)
     
-    # ── 10. UNIFIED AGENT + AUTOMATION AGENT (parallel AI calls) ──
+    # ── 10. UNIFIED AGENT (ONE AI call — main reply) ──
     from agents.unified_agent import run_unified_agent
-    from agents.automation_agent import run_automation_agent
     
     print(f"⚡ Unified Agent: ONE AI call (kw={kw_intent}, state={order_state})...", flush=True)
-    
-    # Run unified agent (main reply) and automation agent (tags + preferences) in parallel
-    unified_task = asyncio.create_task(run_unified_agent(
+    unified_result = await run_unified_agent(
         user_msg=user_msg,
         chat_history=chat_history,
         profile=prof,
