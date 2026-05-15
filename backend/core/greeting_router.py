@@ -94,16 +94,17 @@ JSON only: {{"intent": "GREETING" | "DOMAIN_REQUEST", "reply": "reply if GREETIN
                     if r:
                         await increment_shop_tokens(acc_id, greet_res.usage_metadata.total_token_count)
                 except Exception:
-                    # Last resort fallback: varied hardcoded
+                    # Last resort fallback: varied hardcoded (personalized)
+                    name_part = f" {cust_name}" if cust_name else ""
                     greetings_mm = [
-                        "မင်္ဂလာပါရှင့် 😊 ဘာကူညီပေးရမလဲရှင့်။",
-                        "ဟိုင်းရှင့် 👋 ဘယ်လိုကူညီပေးရမလဲရှင့်။",
-                        "မင်္ဂလာပါရှင့်။ ဘာမေးချင်လဲရှင့်။",
+                        f"မင်္ဂလာပါ{name_part}ရှင့် 😊 ဘာကူညီပေးရမလဲရှင့်။",
+                        f"ဟိုင်း{name_part}ရှင့် 👋 ဘယ်လိုကူညီပေးရမလဲရှင့်။",
+                        f"မင်္ဂလာပါ{name_part}ရှင့်။ ဘာမေးချင်လဲရှင့်။",
                     ]
                     greetings_en = [
-                        "Hello! How can I help you today?",
-                        "Hi there! 👋 What can I do for you?",
-                        "Good day! How may I assist you?",
+                        f"Hello{name_part}! How can I help you today?",
+                        f"Hi{name_part}! 👋 What can I do for you?",
+                        f"Good day{name_part}! How may I assist you?",
                     ]
                     if lang.lower() in ["myanmar", "burmese", "mm"]:
                         reply_text = random.choice(greetings_mm)

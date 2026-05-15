@@ -125,29 +125,21 @@ def merge_tokens(data, tokens):
     return data
 
 
-def make_fallback_response(fallback_message="Connecting to human agent..."):
-    """Standard fallback when agent fails completely."""
+def make_fallback_response(fallback_message="Connecting to human agent...", intent="OTHER"):
+    """Standard fallback when agent fails completely. Uses intent for smarter default replies."""
+    if not fallback_message or fallback_message == "Connecting to human agent...":
+        if intent == "PRODUCT_INQUIRY":
+            fallback_message = "ရှာမတွေ့ပါဘူးရှင့်။ နာမည်အပြည့်အစုံလေး ပြောပေးပါဦးနော်။"
+        elif intent == "START_ORDER":
+            fallback_message = "အော်ဒါတင်ဖို့ နာမည်လေး ပြောပေးပါဦးရှင့်။"
+        elif intent == "DELIVERY":
+            fallback_message = "ပို့ဆောင်ရေးအကြောင်း ပြောပြပေးပါမယ်ရှင့်။"
+        elif intent == "PAYMENT":
+            fallback_message = "ငွေပေးချေနည်းအကြောင်း ပြောပြပေးပါမယ်ရှင့်။"
+    
     return {
-        "is_complex": True,
-        "intent": "OTHER",
-        "extracted": {},
-        "reply": fallback_message,
-        "prompt_tokens": 0,
-        "candidate_tokens": 0,
-    }
-
-
-def merge_tokens(data, tokens):
-    """Merge token counts into response dict."""
-    data.update(tokens)
-    return data
-
-
-def make_fallback_response(fallback_message="Connecting to human agent..."):
-    """Standard fallback when agent fails completely."""
-    return {
-        "is_complex": True,
-        "intent": "OTHER",
+        "is_complex": True if intent in ("COMPLAINT_OR_HUMAN",) else False,
+        "intent": intent,
         "extracted": {},
         "reply": fallback_message,
         "prompt_tokens": 0,

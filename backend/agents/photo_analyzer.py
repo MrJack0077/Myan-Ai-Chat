@@ -39,6 +39,13 @@ async def analyze_image_with_ai(image_base64: str, mime_type: str = "image/jpeg"
         return ""
     
     try:
+        prompt = (
+            "Look at this image. Is it:\n"
+            "1. A payment/bank transfer slip? If yes, describe: bank name, amount, date.\n"
+            "2. A product photo? If yes, describe: what product, color, brand, any text visible.\n"
+            "3. Something unrelated (food, person, scenery, ad, etc)? If yes, say 'unrelated'.\n"
+            "Reply in English, short and factual. No extra text."
+        )
         vision_config = genai.types.GenerateContentConfig(
             temperature=0.1,
         )

@@ -215,16 +215,14 @@ async def process_core_logic(data):
     # ── 6. Download media ──
     media_parts = await download_media_parts(attachments)
     
-    # ⚡ SKIP separate AI Vision — unified agent handles images directly (multimodal)
+    # ⚡ SMART PHOTO ANALYSIS: detect payment slips, product photos, and URL images
     if attachments or media_parts:
-        # Try smart photo analysis (non-blocking)
         try:
             from agents.photo_analyzer import detect_payment_slip, match_product_photo
             is_slip, slip_ctx = detect_payment_slip(user_msg, order_state)
             if is_slip:
                 photo_context = slip_ctx
             else:
-                # Try product matching
                 matched, product_ctx = await match_product_photo(shop_doc_id, user_msg)
                 if matched:
                     photo_context = product_ctx
@@ -232,6 +230,9 @@ async def process_core_logic(data):
                     photo_context = "📸 Customer sent an image. Analyze it naturally with the message."
         except Exception:
             photo_context = "📸 Customer sent an image. Analyze it naturally with the message."
+    elif user_msg and any(pattern in user_msg for pattern in ["login.sendpulse.com/api/", "img=", ".jpg", ".png", ".jpeg"]):
+        # Customer sent a URL to an image (common in SendPulse)
+        photo_context = "🔗 Customer sent a link to an image. If it's a product photo, check [DATABASE INFO] to see if it matches any product. If not, say it's not available."
     
     # ── 7. Save to history ──
     hist_msg = user_msg if user_msg else ("[Voice Message]" if any("audio" in p.get("mime_type","") for p in media_parts) else ("[Photo]" if media_parts else "[Voice/Image/Payload]"))
