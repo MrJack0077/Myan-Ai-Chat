@@ -19,7 +19,7 @@ async def embed_text(req: EmbedRequest):
         # Try Vertex AI via google-genai SDK first
         try:
             emb_config = genai.types.EmbedContentConfig(
-                task_type='retrieval_document',
+                task_type='RETRIEVAL_DOCUMENT',
                 output_dimensionality=768,
             )
             emb_res = await genai_client.aio.models.embed_content(
@@ -36,7 +36,7 @@ async def embed_text(req: EmbedRequest):
             model=EMBEDDING_MODEL_NAME,
             contents=[req.text],
             config=genai.types.EmbedContentConfig(
-                task_type='retrieval_document',
+                task_type='RETRIEVAL_DOCUMENT',
                 output_dimensionality=768,
             ),
         )

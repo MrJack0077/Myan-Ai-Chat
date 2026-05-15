@@ -22,15 +22,15 @@ async def run_embedding_search(user_msg, shop_doc_id, currency):
 
     try:
         try:
-            emb_res = await genai_client.aio.embeddings.create(
+            emb_res = await genai_client.aio.models.embed_content(
                 model=EMBEDDING_MODEL_NAME,
                 contents=[user_msg],
                 config=genai.types.EmbedContentConfig(
-                    task_type='retrieval_query',
+                    task_type='RETRIEVAL_QUERY',
                     output_dimensionality=768,
                 ),
             )
-            embedding = emb_res.embedding
+            embedding = emb_res.embeddings[0].values if emb_res.embeddings else []
         except Exception as e:
             print(f"Embedding API Error: {e}")
             return "No items", None

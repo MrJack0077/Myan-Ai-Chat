@@ -26,7 +26,7 @@ async def generate_product_embedding(product_data):
     
     try:
         emb_config = genai.types.EmbedContentConfig(
-            task_type="retrieval_document",
+            task_type="RETRIEVAL_DOCUMENT",
             output_dimensionality=768,
         )
         res = await genai_client.aio.models.embed_content(
