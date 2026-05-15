@@ -53,10 +53,11 @@ async def call_agent_model(base_model_name, sys_inst, contents, response_schema,
                 contents=contents,
                 config=generate_config,
             ),
-            timeout=20.0
+            timeout=15.0  # ⚡ 15s max — don't keep customer waiting
         )
     except asyncio.TimeoutError:
-        raise TimeoutError("Vertex AI call exceeded 20s timeout")
+        print(f"⏰ AI timeout ({base_model_name}) — using fallback", flush=True)
+        return make_fallback_response("ခဏစောင့်ပေးပါရှင့်။ ပြန်ကြိုးစားပါမယ်။"), {"prompt_tokens": 0, "candidate_tokens": 0}
 
     # ── Parse response ──
     clean_json = re.sub(r'```json\n|\n```|```', '', str(response.text)).strip()
