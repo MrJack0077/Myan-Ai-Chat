@@ -45,7 +45,7 @@ export default function AITrainingPage() {
   }
 
   return (
-    <div className="space-y-8 relative">
+    <div>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-zinc-900 tracking-tight">AI Training</h1>
