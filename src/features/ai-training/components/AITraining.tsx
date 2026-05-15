@@ -10,11 +10,8 @@ import {
   BotIdentityCard,
   CommunicationStyleCard,
   HumanHandoffCard,
-  KnowledgeBaseCard,
-  KBModal,
   ShopPoliciesCard,
   BehavioralConstraintsCard,
-  FAQsCard,
   ReplyGuidelinesCard,
   FewShotExamplesCard,
   ShopSettingsData
@@ -29,9 +26,6 @@ export default function AITraining({ initialConfig, shopId, currentShop, onUnsyn
   const { updateSettings } = useShop(targetShopId);
 
   const [isSaving, setIsSaving] = useState(false);
-  const [showKBModal, setShowKBModal] = useState(false);
-  const [editingKBItemId, setEditingKBItemId] = useState<string | null>(null);
-  const [newKBItem, setNewKBItem] = useState({ title: '', content: '', url: '', type: 'text' as const });
 
   const [shopSettings, setShopSettings] = useState<ShopSettingsData>({
     currency: currentShop?.currency || 'MMK',
@@ -148,42 +142,6 @@ export default function AITraining({ initialConfig, shopId, currentShop, onUnsyn
     }
   };
 
-  const handleAddKBItemClick = () => {
-    setNewKBItem({ title: '', content: '', url: '', type: 'text' });
-    setEditingKBItemId(null);
-    setShowKBModal(true);
-  };
-
-  const handleEditKBItemClick = (item: any) => {
-    setNewKBItem({ title: item.title, content: item.content || '', url: item.url || '', type: item.type || 'text' });
-    setEditingKBItemId(item.id);
-    setShowKBModal(true);
-  };
-
-  const saveKBItem = () => {
-    if (!newKBItem.title || !newKBItem.content) return;
-    
-    if (editingKBItemId) {
-      updateConfig({
-        knowledgeBase: (config.knowledgeBase || []).map((item: any) => 
-          item.id === editingKBItemId 
-            ? { ...item, ...newKBItem, updatedAt: new Date().toISOString() }
-            : item
-        )
-      });
-    } else {
-      const newItem = {
-        id: Math.random().toString(36).substr(2, 9),
-        ...newKBItem,
-        updatedAt: new Date().toISOString()
-      };
-      updateConfig({
-        knowledgeBase: [...(config.knowledgeBase || []), newItem]
-      });
-    }
-    setShowKBModal(false);
-  };
-
   const commonProps = {
     config,
     updateConfig,
@@ -192,29 +150,20 @@ export default function AITraining({ initialConfig, shopId, currentShop, onUnsyn
   };
 
   return (
-    <div className="space-y-8 max-w-4xl mx-auto pb-12">
-      <div className="space-y-6">
-        <ShopSettingsCard shopSettings={shopSettings} setShopSettings={setShopSettings} onSave={handleSaveAllSettings} isSaving={isSaving} />
+    <div className="space-y-8 max-w-5xl mx-auto pb-12">
+      {/* ── Full-width: Shop Settings ── */}
+      <ShopSettingsCard shopSettings={shopSettings} setShopSettings={setShopSettings} onSave={handleSaveAllSettings} isSaving={isSaving} />
+
+      {/* ── 2-Column Grid: AI Configuration Cards ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <BotIdentityCard {...commonProps} />
         <CommunicationStyleCard {...commonProps} />
         <HumanHandoffCard {...commonProps} />
-        <KnowledgeBaseCard {...commonProps} onAddClick={handleAddKBItemClick} onEditClick={handleEditKBItemClick} />
         <ShopPoliciesCard {...commonProps} />
         <BehavioralConstraintsCard {...commonProps} />
-        <FAQsCard {...commonProps} />
         <ReplyGuidelinesCard {...commonProps} />
         <FewShotExamplesCard {...commonProps} />
       </div>
-
-      <KBModal
-        isOpen={showKBModal}
-        onClose={() => setShowKBModal(false)}
-        newKBItem={newKBItem}
-        setNewKBItem={setNewKBItem}
-        onSave={saveKBItem}
-        editingKBItemId={editingKBItemId}
-        shopId={shopId || user?.shopId}
-      />
     </div>
   );
 }
