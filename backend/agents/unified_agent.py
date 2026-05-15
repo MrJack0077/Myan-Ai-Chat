@@ -95,7 +95,7 @@ async def run_unified_agent(
     
     extra_ctx = [
         f"[CUSTOMER] Name={ident.get('name','?')} | State={order_state} | Phone={ident.get('phone','?')}",
-        f"[ORDER] Items={', '.join(prof.get('current_order',{}).get('items',[]))} | Total={prof.get('current_order',{}).get('total_price',0)} {currency}",
+        f"[ORDER] Items={', '.join(profile.get('current_order',{}).get('items',[]))} | Total={profile.get('current_order',{}).get('total_price',0)} {currency}",
         f"[PAYMENT METHODS] {pmt_str}, COD",
         f"[CURRENCY] {currency}",
         f"[DATABASE INFO]\n{tool_info if tool_info else 'No products in database.'}",
