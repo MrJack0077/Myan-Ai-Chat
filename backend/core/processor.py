@@ -220,6 +220,8 @@ async def process_core_logic(data):
             photo_context = await analyze_photo_context(shop_doc_id, user_msg, order_state, len(attachments or []), media_parts)
             if photo_context:
                 print(f"📸 Photo Analysis: {photo_context[:80]}...", flush=True)
+        except ImportError as e:
+            print(f"⚠️ Photo analyzer import failed (missing dependency?): {e}", flush=True)
         except Exception as e:
             print(f"⚠️ Photo analysis error: {e}", flush=True)
     
