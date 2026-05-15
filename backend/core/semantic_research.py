@@ -29,10 +29,9 @@ async def run_embedding_search(user_msg, shop_doc_id, currency):
             print(f"Embedding API Error: {e}")
             return "No items", None
 
-        docs = await hybrid_search_items(shop_doc_id, user_msg, emb_res['embedding'], limit=10)
+        docs = await hybrid_search_items(shop_doc_id, user_msg, emb_res['embedding'], limit=15)
 
         if docs:
-            res_list = []
             for d in docs:
                 stock = int(d.get('stock_quantity') or 0)
                 status = "OUT OF STOCK" if stock <= 0 else f"In Stock ({stock})"
