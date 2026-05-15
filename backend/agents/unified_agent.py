@@ -201,6 +201,14 @@ async def run_unified_agent(
                 data["intent"] = inner["intent"]
         elif isinstance(data.get("response"), str):
             data["reply"] = data.pop("response")
+
+        # ⚡ Plural→Singular normalization: AI sometimes returns arrays
+        if not data.get("reply") and isinstance(data.get("replies"), list) and data["replies"]:
+            data["reply"] = data["replies"][0].get("reply", "")
+        if not data.get("intent") and isinstance(data.get("intents"), list) and data["intents"]:
+            data["intent"] = data["intents"][0].get("intent", "")
+        if not data.get("is_complex") and isinstance(data.get("intents"), list) and data["intents"]:
+            data["is_complex"] = data["intents"][0].get("is_complex", False)
         
         if "question" in data and not data.get("reply"):
             data["reply"] = data.pop("question")
