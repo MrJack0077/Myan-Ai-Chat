@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useShop } from '../../features/shop/hooks/useShop';
 import AITraining from '../../features/ai-training/components/AITraining';
-import FAQManager from '../../features/ai-training/components/FAQManager';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../components/Toast';
 import { RefreshCw } from 'lucide-react';
@@ -65,26 +64,13 @@ export default function AITrainingPage() {
         )}
       </div>
 
-      <div className="space-y-12">
-        <section>
-          <AITraining 
+      <div className="space-y-8">
+        <AITraining 
             initialConfig={currentShop?.aiConfig} 
             shopId={effectiveShopId} 
             currentShop={currentShop}
             onUnsynced={() => setHasPendingSync(true)}
           />
-        </section>
-
-        <section className="pt-12 border-t border-zinc-200">
-          <div className="mb-6">
-            <h2 className="text-2xl font-black text-zinc-900 tracking-tight">FAQ Manager</h2>
-            <p className="text-sm text-zinc-500">Manage frequently asked questions for your AI.</p>
-          </div>
-          <FAQManager 
-            shopId={effectiveShopId || ''} 
-            onUnsynced={() => setHasPendingSync(true)}
-          />
-        </section>
       </div>
     </div>
   );

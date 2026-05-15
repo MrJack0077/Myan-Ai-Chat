@@ -3,8 +3,8 @@ Main message processor — orchestrates the full pipeline:
   Data extraction → Profile → Greeting router → Research → Agent → Response → Cache
 """
 import asyncio
-import json
 import time
+import json
 from datetime import datetime, timezone
 
 from utils import (
