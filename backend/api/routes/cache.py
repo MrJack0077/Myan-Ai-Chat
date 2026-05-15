@@ -47,8 +47,7 @@ async def embed_text(req: EmbedRequest):
     except Exception as e2:
         print(f"Studio fallback also failed: {e2}")
     return {"status": "error", "message": str(e) if 'e' in dir() else "Unknown embedding error"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+
 
 class CleanHistoryOptions(BaseModel):
     redis: bool = False
