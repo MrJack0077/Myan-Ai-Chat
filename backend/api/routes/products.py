@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import time
 from google import genai
-from utils.config import genai_client
+from utils.config import genai_client, studio_client
 from google.cloud.firestore_v1.vector import Vector
 from utils import db, r, EMBEDDING_MODEL_NAME
 import asyncio
@@ -29,7 +29,9 @@ async def generate_product_embedding(product_data):
             task_type="RETRIEVAL_DOCUMENT",
             output_dimensionality=768,
         )
-        res = await genai_client.aio.models.embed_content(
+        # ⚡ AI Studio first (faster, no quota) — fallback to Vertex AI
+        embed_client = studio_client or genai_client
+        res = await embed_client.aio.models.embed_content(
             model=EMBEDDING_MODEL_NAME,
             contents=[text_to_embed],
             config=emb_config,

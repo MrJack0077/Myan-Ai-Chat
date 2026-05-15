@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from utils import db, r, EMBEDDING_MODEL_NAME
 from google import genai
-from utils.config import genai_client
+from utils.config import genai_client, studio_client
 
 router = APIRouter(prefix="/api", tags=["Cache"])
 
@@ -16,31 +16,37 @@ async def embed_text(req: EmbedRequest):
     if not req.text.strip():
         return {"status": "error", "message": "Empty text"}
     try:
-        # Try Vertex AI via google-genai SDK first
-        try:
-            emb_config = genai.types.EmbedContentConfig(
-                task_type='RETRIEVAL_DOCUMENT',
-                output_dimensionality=768,
-            )
-            emb_res = await genai_client.aio.models.embed_content(
-                model=EMBEDDING_MODEL_NAME,
-                contents=[req.text],
-                config=emb_config,
-            )
-            if emb_res and emb_res.embeddings:
-                return {"status": "success", "embedding": emb_res.embeddings[0].values, "provider": "vertex"}
-        except Exception as e:
-            print(f"Vertex embedding failed, trying API key fallback: {e}")
-        # Fallback to API Key mode
-        emb_res = await genai_client.aio.models.embed_content(
+        # ⚡ AI Studio first (faster, no quota) — fallback to Vertex AI
+        embed_client = studio_client or genai_client
+        emb_config = genai.types.EmbedContentConfig(
+            task_type='RETRIEVAL_DOCUMENT',
+            output_dimensionality=768,
+        )
+        emb_res = await embed_client.aio.models.embed_content(
             model=EMBEDDING_MODEL_NAME,
             contents=[req.text],
-            config=genai.types.EmbedContentConfig(
-                task_type='RETRIEVAL_DOCUMENT',
-                output_dimensionality=768,
-            ),
+            config=emb_config,
         )
-        return {"status": "success", "embedding": emb_res.embeddings[0].values, "provider": "studio"}
+        if emb_res and emb_res.embeddings:
+            return {"status": "success", "embedding": emb_res.embeddings[0].values, "provider": "vertex"}
+    except Exception as e:
+        print(f"Embedding failed, trying API key fallback: {e}")
+    # Fallback to API Key mode
+    try:
+        from google import genai
+        if studio_client:
+            emb_res2 = await studio_client.aio.models.embed_content(
+                model=EMBEDDING_MODEL_NAME,
+                contents=[req.text],
+                config=genai.types.EmbedContentConfig(
+                    task_type='RETRIEVAL_DOCUMENT',
+                    output_dimensionality=768,
+                ),
+            )
+            return {"status": "success", "embedding": emb_res2.embeddings[0].values, "provider": "studio"}
+    except Exception as e2:
+        print(f"Studio fallback also failed: {e2}")
+    return {"status": "error", "message": str(e) if 'e' in dir() else "Unknown embedding error"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

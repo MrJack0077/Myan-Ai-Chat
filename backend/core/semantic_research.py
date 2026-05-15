@@ -4,7 +4,7 @@ import asyncio
 import time
 from datetime import datetime, timezone, timedelta
 from google import genai
-from utils.config import genai_client, FAST_MODEL_NAME, EMBEDDING_MODEL_NAME
+from utils.config import genai_client, studio_client, FAST_MODEL_NAME, EMBEDDING_MODEL_NAME
 from google.cloud.firestore_v1.vector import Vector
 from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
 from utils import db, hybrid_search_items, increment_shop_tokens
@@ -22,7 +22,9 @@ async def run_embedding_search(user_msg, shop_doc_id, currency):
 
     try:
         try:
-            emb_res = await genai_client.aio.models.embed_content(
+            # ⚡ AI Studio first (faster, no quota) — fallback to Vertex AI
+            embed_client = studio_client or genai_client
+            emb_res = await embed_client.aio.models.embed_content(
                 model=EMBEDDING_MODEL_NAME,
                 contents=[user_msg],
                 config=genai.types.EmbedContentConfig(

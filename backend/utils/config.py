@@ -10,9 +10,8 @@ try:
 except:
     pass
 
-# ── Vertex AI (Mandatory) ──
-# Migrated from deprecated vertexai SDK to google-genai SDK (still Vertex AI backend)
-genai_client = None
+# ── Vertex AI (Mandatory - Chat/LLM) ──
+genai_client = None  # Vertex AI client for chat/intent (not embeddings)
 try:
     from google import genai
     project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "myanaichat")
@@ -22,6 +21,16 @@ try:
 except Exception as e:
     print(f"🔥 Vertex AI init FAILED: {e}")
     raise RuntimeError(f"Vertex AI is required: {e}")
+
+# ── AI Studio Client (Optional - Embeddings only, faster, no quota) ──
+studio_client = None
+try:
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if gemini_key:
+        studio_client = genai.Client(api_key=gemini_key)
+        print(f"✅ AI Studio client ready (for embeddings)")
+except Exception as e:
+    print(f"⚠️ AI Studio client init failed (non-critical): {e}")
 
 # ── Model Names (Vertex AI format — no 'models/' prefix) ──
 # .strip() handles common .env mistake: "KEY = value" (spaces around =)
