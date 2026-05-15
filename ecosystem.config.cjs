@@ -10,10 +10,6 @@ module.exports = {
       max_memory_restart: "512M",
       env: {
         PM2_MANAGED: "true",
-        REDIS_HOST: "127.0.0.1",
-        REDIS_PORT: "6379",
-        REDIS_PASSWORD: "foobared",
-        REDIS_DB: "0",
       },
     },
     {

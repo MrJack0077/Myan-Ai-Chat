@@ -25,29 +25,19 @@
 backend/
 ├── main.py              — FastAPI entry point
 ├── agents/              — AI agent functions (one file per agent type)
-│   ├── automation_agent.py, product_agent.py, order_agent.py
-│   ├── media_agent.py, service_agent.py, unified_agent.py
-│   ├── photo_analyzer.py, base.py
+│   ├── automation_agent.py, product_agent.py, order_agent.py,
+│   ├── media_agent.py, service_agent.py
 ├── core/                — Pipeline orchestration, caching, memory, routing
 │   ├── processor.py, worker.py, data_extractor.py
-│   ├── order_extractor.py, order_handler.py
 │   ├── prompt_builder.py, prompt_cache.py
-│   ├── intent_classifier.py, greeting_router.py, routing.py
+│   ├── intent_classifier.py, greeting_router.py
 │   ├── conversation_memory.py, cache_manager.py
-│   ├── profile_manager.py, semantic_research.py, plan_enforcer.py
+│   ├── profile_manager.py, order_handler.py, semantic_research.py
 ├── api/routes/          — FastAPI route handlers
 │   ├── webhook.py, shops.py, cache.py, cron.py, products.py
 ├── utils/               — Database helpers, API clients, config
 │   ├── config.py, api_utils.py, firestore_utils.py
 │   ├── redis_utils.py, ai_utils.py, admin_utils.py, sendpulse_utils.py
-├── tests/               — Unit & integration tests
-│   ├── test_product.py
-├── logs/                — PM2 log output
-├── requirements.txt     — Python dependencies
-├── .env                 — Environment variables (see below)
-├── serviceAccount.json  — Google Cloud service account key
-├── docker-compose.yml   — Redis container config
-└── ecosystem.config.cjs — PM2 process config (at project root)
 ```
 - Keep files under 400 lines — extract to new modules when they grow.
 - Each module should have a clear single responsibility.
@@ -60,10 +50,8 @@ backend/
 - Shop data cache: `TTL_WARM=120s`, invalidated on `/refresh` and shop settings update.
 
 ## AI Agent Quality
-- Agents that generate customer-facing replies MUST use `BASE_MODEL` (`gemini-2.5-flash-lite`).
-- Agents that only classify intent MAY use `FAST_MODEL` (`gemini-2.5-flash-lite`).
-- Embedding operations use `EMBEDDING_MODEL_NAME` (`gemini-embedding-2`).
-- Model names are defined in `utils/config.py` and can be overridden via `.env`.
+- Agents that generate customer-facing replies MUST use `BASE_MODEL`.
+- Agents that only classify intent MAY use `FAST_MODEL`.
 - Never hardcode replies that override AI output — prefer AI-generated text with hardcoded fallback only.
 - Use Two-Tier Memory (`conversation_memory.py`) for chat continuity: recent msgs + periodic summary.
 - System prompts MUST be cached via `prompt_cache.py` with `TTL_WARM`.
@@ -78,12 +66,10 @@ backend/
 - Log with clear emoji prefixes: 📩 📤 ❌ ✅ ⚠️ 🧠 ⚡ 💾 🎯 🔔
 
 ## SendPulse Integration
-- All messages go through `send_sendpulse_messages()` in `utils/sendpulse_utils.py`.
-- Typing actions (typing/stop_typing) go through `core/order_handler.py` as `asyncio.create_task` tasks.
-- Webhook verification via HMAC-SHA256 (`verify_sendpulse_signature` in `utils/api_utils.py`).
-- Debounce rapid messages with 4-second buffer window in `api/routes/webhook.py` (uses atomic `SET NX EX`).
-- Use `get_sendpulse_token()` for OAuth with Redis caching (`utils/api_utils.py`).
-- Direct channel routing: Telegram → `/telegram/contacts/send`, Messenger → `/messenger/contacts/send`, unknown → v2 then v1 fallback.
+- All messages go through `send_sendpulse_messages()` in `sendpulse_utils.py`.
+- Webhook verification via HMAC-SHA256 (`verify_sendpulse_signature`).
+- Debounce rapid messages with 4-second buffer window in `webhook.py`.
+- Use `get_sendpulse_token()` for OAuth with Redis caching.
 
 ## Conversation Memory
 - Two-Tier: Recent raw messages (last 6) + compressed summary (every 5 msgs).

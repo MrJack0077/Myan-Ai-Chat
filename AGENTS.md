@@ -23,11 +23,11 @@ This is an AI-powered Chatbot Management Platform facilitating interactions via 
 
 ### 2. Worker & Queueing Logic
 - **Redis Resilience:** Always ensure worker processes can gracefully handle empty queues.
-- **AI Processing:** When calling `genai.GenerativeModel`, ensure the correct model name (`gemini-2.5-flash-lite`) is used as defined in the configuration.
+- **AI Processing:** When calling `genai.GenerativeModel`, ensure the correct model name (`gemini-3.1-flash-lite`) is used as defined in the configuration.
 - **Updates to Queue:** Any changes to how messages are processed *must* consider if updating the `backend/core/worker.py` or `backend/api/routes/webhook.py` is necessary.
 
 ### 3. Error Handling
-- **Firestore Errors:** Use `handleFirestoreError` for all Firestore operations (create, set, update, get, list) in the **frontend**. For the **Python backend**, use `try/except` with descriptive log messages (emoji-prefixed) and dead-letter queue for failed tasks.
+- **Firestore Errors:** Use `handleFirestoreError` for all Firestore operations (create, set, update, get, list). This helper must be used to throw and log detailed JSON information about the error context.
 
 ### 4. Code Standards
 - **TypeScript:** Use strictly typed TypeScript.
