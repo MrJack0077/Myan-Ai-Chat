@@ -310,11 +310,24 @@ async def process_core_logic(data):
     if fast_intent and fast_intent not in ("COMPLAINT_OR_HUMAN",):
         print(f"⚡ SMART SKIP: fast_intent={fast_intent} — skipping Automation Agent", flush=True)
     else:
-        # No keyword match → try Automation Agent with 5s timeout for better intent
         fast_intent = "PRODUCT_INQUIRY"
-        print(f"⚡ SMART SKIP: no keyword → default={fast_intent} — skipping Automation Agent", flush=True)
+        print(f"⚡ SMART SKIP: no keyword → default={fast_intent}", flush=True)
     
-    # Re-enable Automation Agent with 5s timeout for preference extraction
+    # ── Get research results FIRST (needed by automation agent) ──
+    tool_info, msg_emb = research_result
+    
+    # ── Init automation data with keyword classifier result ──
+    automation_data = {
+        "intent": fast_intent,
+        "is_complex": False,
+        "reply": "",
+        "extracted_preferences": {},
+        "behavioral_tags": [],
+        "prompt_tokens": 0,
+        "candidate_tokens": 0,
+    }
+    
+    # ── Re-enable Automation Agent with 5s timeout for preference extraction ──
     print(f"⚡ Automation Agent: Calling with 5s timeout...", flush=True)
     try:
         auto_result = await asyncio.wait_for(
@@ -335,10 +348,6 @@ async def process_core_logic(data):
         print(f"⏰ Automation Agent timed out — using keyword intent", flush=True)
     except Exception as e:
         print(f"⚠️ Automation Agent error: {e}", flush=True)
-    
-    tool_info, msg_emb = research_result
-    if not automation_data.get("intent"):
-        automation_data["intent"] = fast_intent
 
     intent_type = automation_data.get("intent", "PRODUCT_INQUIRY")
     is_complex = automation_data.get("is_complex", False)
