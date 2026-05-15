@@ -1,16 +1,11 @@
-"""
-Smart Photo Analyzer — pre-process images before they reach AI agents.
-
-Detects payment slips, matches product photos against shop inventory,
-and adds rich context to help AI give better responses.
-"""
+"""Smart Photo Analyzer — pre-process images before they reach AI agents."""
 import re
 import asyncio
 from utils import db
 
-# Try to import Gemini for vision — fall back to keyword-only if unavailable
+# Vertex AI Vision
 try:
-    import google.generativeai as genai
+    from vertexai.generative_models import GenerativeModel, GenerationConfig
     from utils.config import FAST_MODEL_NAME
     _VISION_AVAILABLE = True
 except Exception:

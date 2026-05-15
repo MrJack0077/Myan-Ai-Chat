@@ -1,7 +1,8 @@
 import re
 import json
 import asyncio
-import google.generativeai as genai
+from vertexai.generative_models import GenerativeModel, GenerationConfig
+from vertexai.generative_models import Content, Part
 from google.cloud.firestore_v1.vector import Vector
 from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
 from .config import db, BASE_MODEL_NAME

@@ -1,8 +1,8 @@
-"""Greeting vs Domain Request router using fast AI model."""
+"""Greeting vs Domain Request router using Vertex AI."""
 import json
 import time
 import random
-import google.generativeai as genai
+from vertexai.generative_models import GenerativeModel, GenerationConfig
 from utils import add_to_history, increment_shop_tokens, send_sendpulse_messages, FAST_MODEL_NAME, BASE_MODEL_NAME
 from core.prompt_builder import resolve_style, INTENT_GUIDELINES
 
@@ -52,10 +52,10 @@ Role: Decide if the user message is PURE GREETING/SMALL_TALK or if it contains a
 JSON only: {{"intent": "GREETING" | "DOMAIN_REQUEST", "reply": "reply if GREETING else empty"}}"""
 
     try:
-        router_model = genai.GenerativeModel(FAST_MODEL_NAME)
+        router_model = GenerativeModel(FAST_MODEL_NAME)
         router_res = await router_model.generate_content_async(
             contents=[router_sys, f"User: {user_msg}"],
-            generation_config=genai.GenerationConfig(response_mime_type="application/json", temperature=0.1),
+            generation_config=GenerationConfig(response_mime_type="application/json", temperature=0.1),
         )
         router_data = json.loads(router_res.text.strip())
         print(f"🚦 Router: intent={router_data.get('intent')} | took={time.time() - router_start:.2f}s")
@@ -65,15 +65,14 @@ JSON only: {{"intent": "GREETING" | "DOMAIN_REQUEST", "reply": "reply if GREETIN
             
             # If AI gave a good reply, use it directly
             if reply_text and len(reply_text) > 5:
-                # AI reply is good — use as-is
                 pass
             else:
                 # AI reply empty or too short → use BASE model for quality greeting
                 try:
-                    greet_model = genai.GenerativeModel(BASE_MODEL_NAME)
+                    greet_model = GenerativeModel(BASE_MODEL_NAME)
                     greet_res = await greet_model.generate_content_async(
                         contents=[f"You are a friendly shop assistant. Reply warmly to this customer in {lang}. Keep it short (1-2 sentences). Be natural.\n\nCustomer: {user_msg}"],
-                        generation_config=genai.GenerationConfig(temperature=0.7, max_output_tokens=60),
+                        generation_config=GenerationConfig(temperature=0.7, max_output_tokens=60),
                     )
                     reply_text = greet_res.text.strip()
                     if r:
@@ -104,3 +103,25 @@ JSON only: {{"intent": "GREETING" | "DOMAIN_REQUEST", "reply": "reply if GREETIN
         print(f"⚠️ Router Error: {e}")
 
     return False
+
+
+def _hardcoded_greeting_reply(lang: str) -> str:
+    """0ms hardcoded greeting — used when keyword classifier confirms GREETING intent.
+    Varies responses so customers don't get the same greeting every time."""
+    import random
+    greetings_mm = [
+        "မင်္ဂလာပါရှင့် 😊 ဘာကူညီပေးရမလဲရှင့်။",
+        "ဟိုင်းရှင့် 👋 ဘယ်လိုကူညီပေးရမလဲရှင့်။",
+        "မင်္ဂလာပါရှင့်။ ဘာမေးချင်လဲရှင့်။",
+        "ဟိုင်းရှင့် 😊 ဘယ်လိုကူညီပေးရမလဲ။",
+        "မင်္ဂလာပါရှင့် 👋 ပစ္စည်းတွေကြည့်ချင်လား ဘာကူညီပေးရမလဲရှင့်။",
+    ]
+    greetings_en = [
+        "Hello! How can I help you today?",
+        "Hi there! 👋 What can I do for you?",
+        "Good day! How may I assist you?",
+        "Hey! 😊 What are you looking for today?",
+    ]
+    if lang.lower() in ("myanmar", "burmese", "mm"):
+        return random.choice(greetings_mm)
+    return random.choice(greetings_en)

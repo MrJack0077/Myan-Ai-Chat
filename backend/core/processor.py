@@ -76,24 +76,24 @@ async def _release_user_lock(user_id: str):
 
 def _calculate_typing_delay(reply_text: str) -> float:
     """
-    Simulate human typing delay based on message length.
+    Minimal typing delay for perceived responsiveness.
     - Fast typer: ~40 chars/second (~300 CPM)
-    - Adds small random variation for natural feel
-    - Caps at 3.0 seconds max (don't make customer wait too long)
+    - Cap at 0.2s max (don't make customer wait for "human-like" delay)
+    - Streaming isn't supported by SendPulse, so minimal delay is the best UX
     """
     import random
     if not reply_text:
-        return 0.5  # minimum delay
+        return 0.0
     
     char_count = len(reply_text)
-    # Base: 40 chars per second for Myanmar (slower due to complex script)
-    # Plus 20% random variation
+    # Base: 40 chars per second for Myanmar
     base_delay = char_count / 40.0
-    variation = random.uniform(-0.2, 0.3) * base_delay
+    # Minimal variation (±10%)
+    variation = random.uniform(-0.1, 0.1) * base_delay
     delay = base_delay + variation
     
-    # Apply limits (1.5s max for fast replies)
-    delay = max(0.3, min(delay, 1.0))
+    # Apply cap: 0.05s min, 0.2s max
+    delay = max(0.05, min(delay, 0.2))
     return round(delay, 2)
 
 
@@ -150,15 +150,20 @@ async def process_core_logic(data):
         await log_shop_analytics(shop_doc_id, "rate_limit_exceeded", {"user_id": user_id})
         return
 
-    token = await get_sendpulse_token(shop.get('client_id'), shop.get('client_secret'))
+    # ⚡ PARALLEL: Token + Profile load simultaneously (saves 1-3s)
+    token_task = asyncio.create_task(get_sendpulse_token(shop.get('client_id'), shop.get('client_secret')))
+    prof_task = asyncio.create_task(get_user_profile(shop_doc_id, user_id))
+    
+    token = await token_task
+    prof = await prof_task
+    
     if not token:
         print(f"❌ Token failed for bot: {acc_id}", flush=True)
         return
-    print(f"⏱️  [1] Shop+Token loaded: {(time.time()-t1):.2f}s", flush=True)
+    print(f"⏱️  [1] Shop+Token+Profile loaded (parallel): {(time.time()-t1):.2f}s", flush=True)
     t2 = time.time()
 
-    # ── 3. Load Profile + Segment ──
-    prof = await get_user_profile(shop_doc_id, user_id)
+    # ── 3. Segment Customer ──
     segment_customer(prof)
     
     past_purchases = prof.get("sales_data", {}).get("past_purchases", [])
@@ -259,32 +264,46 @@ async def process_core_logic(data):
     print(f"⏱️  [3] Config+Typing+History: {(time.time()-t3):.2f}s", flush=True)
     t4 = time.time()
 
-    # ── 8. Fast Greeting Router ──
-    # ⚡ PRE-CHECK: Use keyword classifier (0ms) to skip AI greeting router for clear domain requests
+    # ── 8. Fast Greeting Router (Keyword-first, 0ms) ──
+    # ⚡ SKIP STRATEGY: Use keyword classifier first. Only call AI router if truly ambiguous.
     kw_intent, _ = fast_intent_classify(user_msg, order_state)
-    is_likely_greeting = len(user_msg) <= 50 and not media_parts and not attachments
     
-    # If keyword classifier already detected ANY non-greeting intent, skip the expensive AI call
-    if is_likely_greeting and kw_intent and kw_intent not in ("GREETING",):
-        print(f"⚡ Greeting Router: SKIP (keyword={kw_intent}) — saving 2-15s", flush=True)
-        is_likely_greeting = False
+    # Greeting router skip rules:
+    # - Message > 80 chars → NOT a greeting
+    # - Media/attachments present → NOT a greeting
+    # - Keyword detected ANY non-greeting intent → NOT a greeting
+    is_likely_greeting = (
+        len(user_msg) <= 80 
+        and not media_parts 
+        and not attachments
+        and (not kw_intent or kw_intent == "GREETING")
+    )
     
     if is_likely_greeting:
-        # Start research in parallel — if not a greeting, results will be ready
-        research_task = asyncio.create_task(run_embedding_search(user_msg, shop_doc_id, currency))
-        
-        greeting_context = chat_history
-        if re_engage_note:
-            greeting_context = f"[Context for AI]\n{re_engage_note}\n\n{chat_history}"
-        t_greet = time.time()
-        handled = await run_greeting_router(user_msg, greeting_context, ai_config, shop_doc_id, conv_id, acc_id, user_id, token, lang)
-        print(f"⏱️  [4] Greeting Router AI call: {(time.time()-t_greet):.2f}s", flush=True)
-        if handled:
-            research_task.cancel()
-            print(f"⏱️  [TOTAL] Pipeline: {(time.time()-t_start):.2f}s (greeting)", flush=True)
+        # Only call AI greeting router if keyword couldn't decide
+        if kw_intent == "GREETING":
+            # Very likely greeting → use hardcoded response (0ms, no AI call)
+            print(f"⚡ Greeting Router: KEYWORD skip (kw={kw_intent}) — 0ms", flush=True)
+            from .greeting_router import _hardcoded_greeting_reply
+            reply_text = _hardcoded_greeting_reply(lang)
+            await add_to_history(shop_doc_id, conv_id, "AI", reply_text, max_len=10)
+            await send_sendpulse_messages(acc_id, user_id, {"intent": "GREETING"}, reply_text, token)
+            await increment_shop_tokens(acc_id, 0)
+            print(f"⏱️  [TOTAL] Pipeline: {(time.time()-t_start):.2f}s (keyword greeting)", flush=True)
             return
+        else:
+            # Ambiguous short message — call AI router (last resort)
+            greeting_context = chat_history
+            if re_engage_note:
+                greeting_context = f"[Context for AI]\n{re_engage_note}\n\n{chat_history}"
+            t_greet = time.time()
+            handled = await run_greeting_router(user_msg, greeting_context, ai_config, shop_doc_id, conv_id, acc_id, user_id, token, lang)
+            print(f"⏱️  [4] Greeting Router AI call: {(time.time()-t_greet):.2f}s", flush=True)
+            if handled:
+                print(f"⏱️  [TOTAL] Pipeline: {(time.time()-t_start):.2f}s (greeting)", flush=True)
+                return
     else:
-        print(f"🚦 Greeting Router: SKIP (msg_len={len(user_msg)}, media={bool(media_parts)})", flush=True)
+        print(f"🚦 Greeting Router: SKIP (msg_len={len(user_msg)}, media={bool(media_parts)}, kw={kw_intent})", flush=True)
 
     chat_history = await get_history(shop_doc_id, conv_id)
     print(f"⏱️  [4] Greeting Router done: {(time.time()-t4):.2f}s", flush=True)
@@ -293,32 +312,23 @@ async def process_core_logic(data):
     # ── 9. Smart Intent Classify + Research ──
     fast_intent, skip_automation = fast_intent_classify(user_msg, order_state)
     
-    if is_likely_greeting:
-        try:
-            research_result = await research_task
-        except asyncio.CancelledError:
-            return
-        except Exception:
-            research_result = ("No items", None)
+    # ⚡ EMBEDDING SKIP: Intents that don't need product search
+    SKIP_EMBEDDING_INTENTS = {"GREETING", "COMPLAINT_OR_HUMAN", "OUT_OF_DOMAIN", 
+                               "DELIVERY", "PAYMENT", "POLICY_FAQ", "SLIP_UPLOAD"}
+    
+    if fast_intent in SKIP_EMBEDDING_INTENTS:
+        print(f"⚡ Embedding SKIP: intent={fast_intent} — 0ms (no product search needed)", flush=True)
+        tool_info, msg_emb = "No items needed", None
     else:
-        research_task = run_embedding_search(user_msg, shop_doc_id, currency)
-        research_result = await research_task
+        t_research = time.time()
+        research_result = await run_embedding_search(user_msg, shop_doc_id, currency)
+        tool_info, msg_emb = research_result
+        print(f"⏱️  Embedding Research: {(time.time()-t_research):.2f}s", flush=True)
     
-    # SKIP Automation Agent entirely — keyword classifier handles intent (0ms)
-    # Let the main agent (product/order/media) handle the actual reply generation
-    # This saves 6-15s per message by eliminating 1 AI call
-    if fast_intent and fast_intent not in ("COMPLAINT_OR_HUMAN",):
-        print(f"⚡ SMART SKIP: fast_intent={fast_intent} — skipping Automation Agent", flush=True)
-    else:
-        fast_intent = "PRODUCT_INQUIRY"
-        print(f"⚡ SMART SKIP: no keyword → default={fast_intent}", flush=True)
-    
-    # ── Get research results FIRST (needed by automation agent) ──
-    tool_info, msg_emb = research_result
-    
-    # ── Init automation data with keyword classifier result ──
+    # ⚡ SKIP Automation Agent entirely when keyword confidence is high
+    # Only call Automation Agent for: COMPLAINT, HUMAN_HANDOVER, unclear intents, active order flows
     automation_data = {
-        "intent": fast_intent,
+        "intent": fast_intent or "PRODUCT_INQUIRY",
         "is_complex": False,
         "reply": "",
         "extracted_preferences": {},
@@ -327,27 +337,36 @@ async def process_core_logic(data):
         "candidate_tokens": 0,
     }
     
-    # ── Re-enable Automation Agent with 5s timeout for preference extraction ──
-    print(f"⚡ Automation Agent: Calling with 5s timeout...", flush=True)
-    try:
-        auto_result = await asyncio.wait_for(
-            run_automation_agent(user_msg, media_parts, chat_history, prof, ai_config, shop_info_data, BASE_MODEL_NAME, shop_doc_id=shop_doc_id, tool_info=tool_info),
-            timeout=5.0
-        )
-        automation_data.update({
-            "intent": auto_result.get("intent", fast_intent),
-            "is_complex": auto_result.get("is_complex", False),
-            "reply": auto_result.get("reply", ""),
-            "extracted_preferences": auto_result.get("extracted_preferences", {}),
-            "behavioral_tags": auto_result.get("behavioral_tags", []),
-            "prompt_tokens": auto_result.get("prompt_tokens", 0),
-            "candidate_tokens": auto_result.get("candidate_tokens", 0),
-        })
-        print(f"✅ Automation Agent returned: intent={automation_data['intent']}", flush=True)
-    except asyncio.TimeoutError:
-        print(f"⏰ Automation Agent timed out — using keyword intent", flush=True)
-    except Exception as e:
-        print(f"⚠️ Automation Agent error: {e}", flush=True)
+    NEED_AUTOMATION = (
+        not skip_automation                          # Keyword says "need AI"
+        or fast_intent in ("COMPLAINT_OR_HUMAN",)   # Always needs empathy
+        or order_state not in ("NONE",)              # Active order flow → needs care
+        or not fast_intent                           # Unclear intent
+    )
+    
+    if NEED_AUTOMATION:
+        print(f"⚡ Automation Agent: Calling (skip_auto={skip_automation}, intent={fast_intent}, state={order_state})...", flush=True)
+        try:
+            auto_result = await asyncio.wait_for(
+                run_automation_agent(user_msg, media_parts, chat_history, prof, ai_config, shop_info_data, BASE_MODEL_NAME, shop_doc_id=shop_doc_id, tool_info=tool_info),
+                timeout=5.0
+            )
+            automation_data.update({
+                "intent": auto_result.get("intent", fast_intent),
+                "is_complex": auto_result.get("is_complex", False),
+                "reply": auto_result.get("reply", ""),
+                "extracted_preferences": auto_result.get("extracted_preferences", {}),
+                "behavioral_tags": auto_result.get("behavioral_tags", []),
+                "prompt_tokens": auto_result.get("prompt_tokens", 0),
+                "candidate_tokens": auto_result.get("candidate_tokens", 0),
+            })
+            print(f"✅ Automation Agent returned: intent={automation_data['intent']}", flush=True)
+        except asyncio.TimeoutError:
+            print(f"⏰ Automation Agent timed out — using keyword intent", flush=True)
+        except Exception as e:
+            print(f"⚠️ Automation Agent error: {e}", flush=True)
+    else:
+        print(f"⚡ SMART SKIP: fast_intent={fast_intent} (skip_auto={skip_automation}) — 0ms saved", flush=True)
 
     intent_type = automation_data.get("intent", "PRODUCT_INQUIRY")
     is_complex = automation_data.get("is_complex", False)

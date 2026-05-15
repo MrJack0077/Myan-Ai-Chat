@@ -1,5 +1,4 @@
 import os
-import google.generativeai as genai
 import redis.asyncio as aioredis
 from google.cloud import firestore
 from dotenv import load_dotenv
@@ -11,28 +10,21 @@ try:
 except:
     pass
 
-gm_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("VITE_GEMINI_API_KEY")
-if gm_key:
-    genai.configure(api_key=gm_key)
-    print(f"✅ DEBUG: GEMINI_API_KEY found")
-else:
-    print("❌ DEBUG: GEMINI_API_KEY NOT FOUND!")
-
-# Try Vertex AI init (optional — falls back to AI Studio if fails)
-_vertex_available = False
+# ── Vertex AI (Mandatory) ──
 try:
     import vertexai
     project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "myanaichat")
     location = os.getenv("VERTEX_AI_LOCATION", "us-east4")
     vertexai.init(project=project_id, location=location)
-    _vertex_available = True
     print(f"✅ Vertex AI initialized: {project_id}/{location}")
 except Exception as e:
-    print(f"⚠️ Vertex AI not available — using AI Studio fallback: {e}")
+    print(f"🔥 Vertex AI init FAILED: {e}")
+    raise RuntimeError(f"Vertex AI is required: {e}")
 
-BASE_MODEL_NAME = os.getenv("BASE_MODEL_NAME", "models/gemini-3.1-flash-lite-preview")
-FAST_MODEL_NAME = os.getenv("FAST_MODEL_NAME", "models/gemini-3.1-flash-lite-preview")
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "gemini-embedding-2")
+# ── Model Names (Vertex AI format — no 'models/' prefix) ──
+BASE_MODEL_NAME = os.getenv("BASE_MODEL_NAME", "gemini-2.5-flash-lite")
+FAST_MODEL_NAME = os.getenv("FAST_MODEL_NAME", "gemini-2.5-flash-lite")
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "text-embedding-004")
 
 
 sa_path = os.getenv("SERVICE_ACCOUNT_PATH")
@@ -64,7 +56,11 @@ try:
         redis_db = str(os.getenv('REDIS_DB', '0')).strip().strip('"').strip("'")
         redis_pass = os.getenv('REDIS_PASSWORD')
         
-        url = f"redis://:{redis_pass}@{redis_host}:{redis_port}/{redis_db}" if redis_pass else f"redis://{redis_host}:{redis_port}/{redis_db}"
-        r = aioredis.from_url(url, decode_responses=True)
+        redis_pass_val = redis_pass.strip().strip('"').strip("'") if redis_pass else ""
+        if redis_pass_val:
+            url = f"redis://:{redis_pass_val}@{redis_host}:{redis_port}/{redis_db}"
+        else:
+            url = f"redis://{redis_host}:{redis_port}/{redis_db}"
+        r = aioredis.from_url(url, decode_responses=True, protocol=2)
 except Exception as e:
     print(f"🔥 Redis Error: {e}")

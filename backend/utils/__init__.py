@@ -1,4 +1,4 @@
-from .config import r, db, gm_key, BASE_MODEL_NAME, FAST_MODEL_NAME, EMBEDDING_MODEL_NAME
+from .config import r, db, BASE_MODEL_NAME, FAST_MODEL_NAME, EMBEDDING_MODEL_NAME
 from .api_utils import verify_sendpulse_signature, get_sendpulse_token, bg_post, robust_api_post
 from .firestore_utils import get_shop_data, log_shop_analytics, increment_shop_tokens
 from .redis_utils import add_to_history, get_history, check_rate_limit

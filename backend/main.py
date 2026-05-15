@@ -21,7 +21,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     print("🌟 FastAPI Startup event firing... starting health checks", flush=True)
-    from utils import r, gm_key
+    from utils import r
     if r:
         try:
             ping = await r.ping()
@@ -31,10 +31,8 @@ async def startup_event():
     else:
         print("⚠️ Redis NOT initialized (r is None)", flush=True)
     
-    if gm_key:
-        print(f"✅ Gemini API Key found (starts with {gm_key[:4]}...)", flush=True)
-    else:
-        print("❌ Gemini API Key NOT FOUND!", flush=True)
+    # Vertex AI is mandatory — check was done in config.py at import time
+    print("✅ Vertex AI: initialized at startup", flush=True)
 
     print("🚀 Starting workers...", flush=True)
     for i in range(5):
