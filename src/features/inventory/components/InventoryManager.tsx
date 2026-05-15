@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Package, 
   Search, 
@@ -8,10 +8,13 @@ import {
   Upload, 
   Filter, 
   ChevronDown,
-  RefreshCw 
+  RefreshCw,
+  LayoutGrid,
+  List 
 } from 'lucide-react';
 import { VendorItem, Category } from '../../../types';
 import InventoryGrid from './InventoryGrid';
+import InventoryList from './InventoryList';
 import CategoryManager from './CategoryManager';
 import { useTranslation } from 'react-i18next';
 
@@ -61,6 +64,20 @@ export default function InventoryManager({
   onSyncAI
 }: InventoryManagerProps) {
   const { t } = useTranslation();
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    try {
+      const stored = localStorage.getItem('inventoryViewMode');
+      return stored === 'list' ? 'list' : 'grid';
+    } catch {
+      return 'grid';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('inventoryViewMode', viewMode);
+    } catch {}
+  }, [viewMode]);
 
   const filteredItems = items.filter(item => {
     const itemName = item.name || '';
@@ -136,6 +153,34 @@ export default function InventoryManager({
             </button>
           </div>
 
+          {/* ── View Toggle ── */}
+          <div className="flex items-center bg-zinc-100 p-1 rounded-2xl border border-zinc-200">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2.5 rounded-xl transition-all flex items-center gap-1.5 ${
+                viewMode === 'grid'
+                  ? 'bg-white text-indigo-600 shadow-sm font-bold'
+                  : 'text-zinc-400 hover:text-zinc-600'
+              }`}
+              title="Grid View"
+            >
+              <LayoutGrid className="w-4 h-4" />
+              <span className="text-xs font-bold hidden lg:inline">Grid</span>
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2.5 rounded-xl transition-all flex items-center gap-1.5 ${
+                viewMode === 'list'
+                  ? 'bg-white text-indigo-600 shadow-sm font-bold'
+                  : 'text-zinc-400 hover:text-zinc-600'
+              }`}
+              title="List View"
+            >
+              <List className="w-4 h-4" />
+              <span className="text-xs font-bold hidden lg:inline">List</span>
+            </button>
+          </div>
+
           {hasPendingSync && (
             <button 
               onClick={onSyncAI}
@@ -156,13 +201,23 @@ export default function InventoryManager({
         </div>
       </div>
 
-      <InventoryGrid 
-        items={filteredItems} 
-        onEdit={onEditItem} 
-        onDelete={onDeleteItem}
-        onToggleStatus={onToggleStatus}
-        currency={currency}
-      />
+      {viewMode === 'grid' ? (
+        <InventoryGrid 
+          items={filteredItems} 
+          onEdit={onEditItem} 
+          onDelete={onDeleteItem}
+          onToggleStatus={onToggleStatus}
+          currency={currency}
+        />
+      ) : (
+        <InventoryList
+          items={filteredItems}
+          onEdit={onEditItem}
+          onDelete={onDeleteItem}
+          onToggleStatus={onToggleStatus}
+          currency={currency}
+        />
+      )}
 
       {isCategoryManagerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
