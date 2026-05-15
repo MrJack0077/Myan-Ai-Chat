@@ -3,10 +3,11 @@ import json
 import asyncio
 import time
 from datetime import datetime, timezone, timedelta
-import google.generativeai as genai
+from google import genai
+from utils.config import genai_client, FAST_MODEL_NAME, EMBEDDING_MODEL_NAME
 from google.cloud.firestore_v1.vector import Vector
 from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
-from utils import db, hybrid_search_items, increment_shop_tokens, FAST_MODEL_NAME, EMBEDDING_MODEL_NAME
+from utils import db, hybrid_search_items, increment_shop_tokens
 
 # Distance thresholds for semantic cache trust
 CACHE_TRUST_DISTANCE  = 0.08   # distance < 0.08 → trust without AI validation
@@ -21,10 +22,15 @@ async def run_embedding_search(user_msg, shop_doc_id, currency):
 
     try:
         try:
-            emb_res = await genai.embed_content_async(
-                model=EMBEDDING_MODEL_NAME, content=user_msg,
-                task_type='retrieval_query', output_dimensionality=768,
+            emb_res = await genai_client.aio.embeddings.create(
+                model=EMBEDDING_MODEL_NAME,
+                contents=[user_msg],
+                config=genai.types.EmbedContentConfig(
+                    task_type='retrieval_query',
+                    output_dimensionality=768,
+                ),
             )
+            embedding = emb_res.embedding
         except Exception as e:
             print(f"Embedding API Error: {e}")
             return "No items", None
@@ -126,10 +132,14 @@ Return JSON: {"decision": "VALID" | "INVALID"}
 """
         verify_prompt = f"Current User Question: {user_msg}\nCached Answer: {potential_reply}\nDecision (JSON):"
 
-        v_model = genai.GenerativeModel(FAST_MODEL_NAME)
-        v_res = await v_model.generate_content_async(
+        v_config = genai.types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.1,
+        )
+        v_res = await genai_client.aio.models.generate_content(
+            model=FAST_MODEL_NAME,
             contents=[verify_sys, verify_prompt],
-            generation_config=genai.GenerationConfig(response_mime_type="application/json", temperature=0.1),
+            config=v_config,
         )
         v_data = json.loads(v_res.text.strip())
 

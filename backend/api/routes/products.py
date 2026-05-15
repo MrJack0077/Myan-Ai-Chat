@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import List, Optional
 import time
-import google.generativeai as genai
+from google import genai
+from utils.config import genai_client
 from google.cloud.firestore_v1.vector import Vector
 from utils import db, r, EMBEDDING_MODEL_NAME
 import asyncio
@@ -14,7 +15,7 @@ class ProductSyncRequest(BaseModel):
     product_ids: Optional[List[str]] = None
 
 async def generate_product_embedding(product_data):
-    """Combine product fields and generate embedding."""
+    """Combine product fields and generate embedding via google-genai SDK."""
     name = product_data.get('name', '')
     desc = product_data.get('description', '')
     ai_desc = product_data.get('ai_custom_description', '')
@@ -24,14 +25,16 @@ async def generate_product_embedding(product_data):
     text_to_embed = f"Product: {name}\nDescription: {desc}\nAI Info: {ai_desc}\nKeywords: {ai_keys}"
     
     try:
-        res = await genai.embed_content_async(
-            model=EMBEDDING_MODEL_NAME,
-            content=text_to_embed,
+        emb_config = genai.types.EmbedContentConfig(
             task_type="retrieval_document",
-            title=name,
-            output_dimensionality=768
+            output_dimensionality=768,
         )
-        return res['embedding']
+        res = await genai_client.aio.embeddings.create(
+            model=EMBEDDING_MODEL_NAME,
+            contents=[text_to_embed],
+            config=emb_config,
+        )
+        return res.embedding
     except Exception as e:
         print(f"Error embedding product {name}: {e}")
         return None

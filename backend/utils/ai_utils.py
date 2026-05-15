@@ -1,11 +1,11 @@
 import re
 import json
 import asyncio
-from vertexai.generative_models import GenerativeModel, GenerationConfig
-from vertexai.generative_models import Content, Part
+from google import genai
+from utils.config import genai_client, BASE_MODEL_NAME
 from google.cloud.firestore_v1.vector import Vector
 from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
-from .config import db, BASE_MODEL_NAME
+from .config import db
 
 def filter_knowledge_base(kb, user_msg, max_items=5):
     if not kb or not user_msg: return kb[:max_items] if kb else []
@@ -24,10 +24,14 @@ def filter_knowledge_base(kb, user_msg, max_items=5):
 async def classify_message_intent(user_msg, base_model_name=None):
     sys_prompt = "Analyze the customer message. Return JSON with 'intent' (GREETING, PRODUCT_INQUIRY, SHOP_POLICY_PRIVACY, ORDER_CHECKOUT, COMPLAINT_OR_HUMAN, MEDIA, OTHER) and 'sentiment' (POSITIVE, NEUTRAL, NEGATIVE)."
     try:
-        model = genai.GenerativeModel(base_model_name or BASE_MODEL_NAME)
-        res = await model.generate_content_async(
+        intent_config = genai.types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.1,
+        )
+        res = await genai_client.aio.models.generate_content(
+            model=base_model_name or BASE_MODEL_NAME,
             contents=[sys_prompt, f"Message: {user_msg}"],
-            generation_config=genai.GenerationConfig(response_mime_type="application/json", temperature=0.1)
+            config=intent_config,
         )
         clean_json = re.sub(r'```json\n|\n```|```', '', res.text).strip()
         data = json.loads(clean_json)

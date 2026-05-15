@@ -1,6 +1,5 @@
 import json
 import re
-from vertexai.generative_models import GenerativeModel, GenerationConfig
 import typing_extensions
 from core.prompt_builder import assemble_system_prompt
 from agents.base import call_agent_model, merge_tokens

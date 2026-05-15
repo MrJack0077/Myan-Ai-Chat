@@ -11,7 +11,8 @@ import json
 import re
 import time
 import typing_extensions
-from vertexai.generative_models import GenerativeModel, GenerationConfig
+from google import genai
+from utils.config import genai_client
 from core.prompt_builder import assemble_system_prompt
 from utils import BASE_MODEL_NAME
 
@@ -129,32 +130,29 @@ async def run_unified_agent(
         shop_doc_id=shop_doc_id,
     )
     
-    # ⚡ VERTEX CONTEXT CACHE: Cache system prompt per shop (not product DB)
-    # Saves 36% token cost on every subsequent message for this shop
-    cached_content = None
+    # ⚡ GOOGLE-GENAI CONTEXT CACHE: Cache system prompt per shop (not product DB)
+    cached_content_name = None
     if shop_doc_id:
         try:
             from core.prompt_cache import get_cached_content_id, set_cached_content_id, get_shop_config_version
             config_ver = await get_shop_config_version(shop_doc_id)
             if config_ver:
-                cache_id = await get_cached_content_id(shop_doc_id, config_ver)
-                if cache_id:
-                    try:
-                        from vertexai.generative_models import CachedContent as CachedContentCls
-                        cached_content = CachedContentCls(cache_id) if hasattr(CachedContentCls, '__init__') else None
-                    except:
-                        cached_content = cache_id  # pass ID if class not available
-                    if cached_content:
-                        print(f"🎯 Vertex Cache HIT: shop={shop_doc_id} (config_ver={config_ver[:8]})", flush=True)
+                cached_content_name = await get_cached_content_id(shop_doc_id, config_ver)
+                if cached_content_name:
+                    print(f"🎯 Vertex Cache HIT: shop={shop_doc_id} (config_ver={config_ver[:8]})", flush=True)
         except Exception as e:
             print(f"⚠️ Vertex Cache lookup error (non-critical): {e}", flush=True)
     
-    model_kwargs = {}
-    if cached_content:
-        model_kwargs['cached_content'] = cached_content
+    model_config_dict = {
+        "response_mime_type": "application/json",
+        "temperature": 0.2,
+        "system_instruction": sys_inst,
+    }
+    if cached_content_name:
+        model_config_dict["cached_content"] = cached_content_name
         print(f"🔗 Using Vertex cached content for shop {shop_doc_id}", flush=True)
     
-    model = GenerativeModel(BASE_MODEL_NAME, system_instruction=sys_inst, **model_kwargs)
+    gen_config = genai.types.GenerateContentConfig(**model_config_dict)
     
     contents = []
     if chat_history:
@@ -168,13 +166,10 @@ async def run_unified_agent(
     t_start = time.time()
     try:
         res = await asyncio.wait_for(
-            model.generate_content_async(
+            genai_client.aio.models.generate_content(
+                model=BASE_MODEL_NAME,
                 contents=contents,
-                generation_config=GenerationConfig(
-                    response_mime_type="application/json",
-                    # ⚡ response_schema removed — Vertex SDK has bugs with TypedDict
-                    temperature=0.2,
-                ),
+                config=gen_config,
             ),
             timeout=8.0  # ⚡ 8s timeout — don't keep customer waiting
         )
@@ -221,19 +216,20 @@ async def run_unified_agent(
         }
         print(f"⏱️  Unified Agent: {(time.time()-t_start):.2f}s | intent={data.get('intent','?')} | prompt_tokens={tokens['prompt_tokens']}", flush=True)
         
-        # ⚡ VERTEX CACHE CREATION: After first successful call, create cache for next time
-        if not cached_content and shop_doc_id:
+        # ⚡ GOOGLE-GENAI CACHE CREATION: After first successful call, create cache for next time
+        if not cached_content_name and shop_doc_id:
             try:
                 from core.prompt_cache import set_cached_content_id, get_shop_config_version
                 config_ver = await get_shop_config_version(shop_doc_id)
                 if config_ver:
-                    from vertexai.generative_models import CachedContent as CachedContentCls
-                    # Create cache from this response's context
-                    new_cache = CachedContentCls.create(
-                        model_name=BASE_MODEL_NAME,
+                    cache_create_config = genai.types.CreateCachedContentConfig(
                         system_instruction=sys_inst,
                         contents=contents[:1] if contents else [],
-                        ttl="7200s"  # 2 hours
+                        ttl="7200s",
+                    )
+                    new_cache = genai_client.caches.create(
+                        model=BASE_MODEL_NAME,
+                        config=cache_create_config,
                     )
                     await set_cached_content_id(shop_doc_id, config_ver, new_cache.name)
                     print(f"💾 Vertex Cache CREATED: shop={shop_doc_id} (2hr TTL)", flush=True)

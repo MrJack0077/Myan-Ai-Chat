@@ -3,10 +3,10 @@ import re
 import asyncio
 from utils import db
 
-# Vertex AI Vision
+# Vertex AI Vision via google-genai SDK
 try:
-    from vertexai.generative_models import GenerativeModel, GenerationConfig
-    from utils.config import FAST_MODEL_NAME
+    from google import genai
+    from utils.config import genai_client, FAST_MODEL_NAME
     _VISION_AVAILABLE = True
 except Exception:
     _VISION_AVAILABLE = False
@@ -39,17 +39,15 @@ async def analyze_image_with_ai(image_base64: str, mime_type: str = "image/jpeg"
         return ""
     
     try:
-        model = genai.GenerativeModel(FAST_MODEL_NAME)
-        prompt = (
-            "Look at this image. Is it:\n"
-            "1. A payment/bank transfer slip? If yes, describe: bank name, amount, date.\n"
-            "2. A product photo? If yes, describe: what product, color, brand, any text visible.\n"
-            "3. Something unrelated (food, person, scenery, ad, etc)? If yes, say 'unrelated'.\n"
-            "Reply in English, short and factual. No extra text."
+        vision_config = genai.types.GenerateContentConfig(
+            temperature=0.1,
         )
-        part = {"mime_type": mime_type, "data": image_base64}
         res = await asyncio.wait_for(
-            model.generate_content_async(contents=[prompt, part]),
+            genai_client.aio.models.generate_content(
+                model=FAST_MODEL_NAME,
+                contents=[prompt, genai.types.Part.from_bytes(data=image_base64, mime_type=mime_type)],
+                config=vision_config,
+            ),
             timeout=8.0
         )
         return res.text.strip() if res and res.text else ""

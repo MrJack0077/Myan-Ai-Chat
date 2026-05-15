@@ -8,8 +8,8 @@ Token budget:      ~500 tokens max for history context
 Summary style:     Full conversation context (both Customer and AI)
 """
 import json
-from vertexai.generative_models import GenerativeModel, GenerationConfig
-from utils.config import BASE_MODEL_NAME, FAST_MODEL_NAME
+from google import genai
+from utils.config import genai_client, BASE_MODEL_NAME, FAST_MODEL_NAME
 
 MAX_RECENT_MESSAGES = 6       # last N messages kept raw
 SUMMARIZE_EVERY_N   = 5        # update summary every N customer messages
@@ -84,7 +84,6 @@ async def generate_conversation_summary(
         return old_summary or ""
 
     model_name = base_model_name or BASE_MODEL_NAME
-    model = GenerativeModel(model_name)
 
     sys_prompt = """You are a conversation summarizer for a shop chatbot.
 
@@ -111,9 +110,14 @@ Rules:
     user_prompt = "\n\n".join(user_prompt_parts)
 
     try:
-        res = await model.generate_content_async(
+        sum_config = genai.types.GenerateContentConfig(
+            temperature=0.2,
+            max_output_tokens=150,
+        )
+        res = await genai_client.aio.models.generate_content(
+            model=model_name,
             contents=[sys_prompt, user_prompt],
-            generation_config=GenerationConfig(temperature=0.2, max_output_tokens=150),
+            config=sum_config,
         )
         summary = res.text.strip()
         # Truncate if too long

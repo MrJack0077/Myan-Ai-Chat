@@ -1,10 +1,11 @@
-"""Greeting vs Domain Request router using Vertex AI."""
+"""Greeting vs Domain Request router using Vertex AI via google-genai SDK."""
 import asyncio
 import json
 import time
 import random
-from vertexai.generative_models import GenerativeModel, GenerationConfig
-from utils import add_to_history, increment_shop_tokens, send_sendpulse_messages, FAST_MODEL_NAME, BASE_MODEL_NAME
+from google import genai
+from utils.config import genai_client, FAST_MODEL_NAME, BASE_MODEL_NAME
+from utils import add_to_history, increment_shop_tokens, send_sendpulse_messages
 from core.prompt_builder import resolve_style, INTENT_GUIDELINES
 
 
@@ -53,11 +54,15 @@ Role: Decide if the user message is PURE GREETING/SMALL_TALK or if it contains a
 JSON only: {{"intent": "GREETING" | "DOMAIN_REQUEST", "reply": "reply if GREETING else empty"}}"""
 
     try:
-        router_model = GenerativeModel(FAST_MODEL_NAME)
+        router_config = genai.types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.1,
+        )
         router_res = await asyncio.wait_for(
-            router_model.generate_content_async(
+            genai_client.aio.models.generate_content(
+                model=FAST_MODEL_NAME,
                 contents=[router_sys, f"User: {user_msg}"],
-                generation_config=GenerationConfig(response_mime_type="application/json", temperature=0.1),
+                config=router_config,
             ),
             timeout=6.0  # ⚡ 6s timeout — don't keep customer waiting
         )
@@ -73,11 +78,15 @@ JSON only: {{"intent": "GREETING" | "DOMAIN_REQUEST", "reply": "reply if GREETIN
             else:
                 # AI reply empty or too short → use BASE model for quality greeting
                 try:
-                    greet_model = GenerativeModel(BASE_MODEL_NAME)
+                    greet_config = genai.types.GenerateContentConfig(
+                        temperature=0.7,
+                        max_output_tokens=60,
+                    )
                     greet_res = await asyncio.wait_for(
-                        greet_model.generate_content_async(
+                        genai_client.aio.models.generate_content(
+                            model=BASE_MODEL_NAME,
                             contents=[f"You are a friendly shop assistant. Reply warmly to this customer in {lang}. Keep it short (1-2 sentences). Be natural.\n\nCustomer: {user_msg}"],
-                            generation_config=GenerationConfig(temperature=0.7, max_output_tokens=60),
+                            config=greet_config,
                         ),
                         timeout=4.0  # ⚡ 4s timeout for greeting reply
                     )

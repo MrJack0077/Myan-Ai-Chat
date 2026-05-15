@@ -11,12 +11,14 @@ except:
     pass
 
 # ── Vertex AI (Mandatory) ──
+# Migrated from deprecated vertexai SDK to google-genai SDK (still Vertex AI backend)
+genai_client = None
 try:
-    import vertexai
+    from google import genai
     project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "myanaichat")
     location = os.getenv("VERTEX_AI_LOCATION", "us-east4")
-    vertexai.init(project=project_id, location=location)
-    print(f"✅ Vertex AI initialized: {project_id}/{location}")
+    genai_client = genai.Client(vertexai=True, project=project_id, location=location)
+    print(f"✅ Vertex AI initialized via google-genai: {project_id}/{location}")
 except Exception as e:
     print(f"🔥 Vertex AI init FAILED: {e}")
     raise RuntimeError(f"Vertex AI is required: {e}")

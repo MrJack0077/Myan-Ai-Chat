@@ -1,92 +1,84 @@
-"""Shared base utilities for all AI agents — Vertex AI only."""
+"""Shared base utilities for all AI agents — google-genai SDK (Vertex AI backend)."""
 import json
 import re
 import asyncio
 
-# Vertex AI is mandatory
-from vertexai.generative_models import GenerativeModel, GenerationConfig
+# Migrated from deprecated vertexai SDK to google-genai SDK
+from google import genai
+from utils.config import genai_client
 
-# CachedContent is optional (only available in newer SDK versions)
-try:
-    from vertexai.cached_content import CachedContent
-    _CACHE_AVAILABLE = True
-except ImportError:
-    try:
-        from vertexai.generative_models import CachedContent as _CachedContent
-        CachedContent = _CachedContent
-        _CACHE_AVAILABLE = True
-    except ImportError:
-        CachedContent = None
-        _CACHE_AVAILABLE = False
-        print("⚠️ CachedContent not available — Vertex AI Context Cache disabled", flush=True)
+# Context Caching is always available in google-genai SDK
+_CACHE_AVAILABLE = True
 
 
 async def call_agent_model(base_model_name, sys_inst, contents, response_schema, temperature=0.2, shop_doc_id=None, config_version=None):
-    """Call Vertex AI with optional Context Cache for 50-75% token savings.
+    """Call Vertex AI via google-genai SDK with optional Context Cache.
     
     If shop_doc_id and config_version are provided, uses Vertex AI Context Cache
-    to store the system instruction prefix.
+    to store the system instruction prefix (50-75% token savings).
     """
     
-    # ── Vertex AI Context Cache ──
-    cached_content_id = None
+    # ── Context Cache Lookup ──
+    cached_content_name = None
     if shop_doc_id and config_version:
         try:
             from core.prompt_cache import get_cached_content_id, set_cached_content_id
-            cached_content_id = await get_cached_content_id(shop_doc_id, config_version)
-            if cached_content_id:
-                print(f"🎯 Cache HIT for shop {shop_doc_id}: {cached_content_id[:20]}...", flush=True)
+            cached_content_name = await get_cached_content_id(shop_doc_id, config_version)
+            if cached_content_name:
+                print(f"🎯 Cache HIT for shop {shop_doc_id}: {cached_content_name[:20]}...", flush=True)
         except Exception as e:
             print(f"⚠️ Cache lookup error (non-critical): {e}", flush=True)
     
-    # ── Vertex AI direct call ──
-    model_kwargs = {}
-    if cached_content_id:
-        try:
-            model_kwargs['cached_content'] = CachedContent(cached_content_id)
-            print(f"🔗 Using cached content: {cached_content_id[:20]}...", flush=True)
-        except Exception:
-            cached_content_id = None  # Stale cache — will recreate
+    # ── Build GenerateContentConfig ──
+    config_dict = {
+        "response_mime_type": "application/json",
+        "temperature": temperature,
+        "system_instruction": sys_inst,
+    }
     
-    model = GenerativeModel(base_model_name, system_instruction=sys_inst, **model_kwargs)
+    if response_schema:
+        config_dict["response_json_schema"] = response_schema
     
+    if cached_content_name:
+        config_dict["cached_content"] = cached_content_name
+        print(f"🔗 Using cached content: {cached_content_name[:20]}...", flush=True)
+    
+    generate_config = genai.types.GenerateContentConfig(**config_dict)
+    
+    # ── Call Vertex AI (async) ──
     try:
-        gen_config = GenerationConfig(
-            response_mime_type="application/json",
-            response_schema=response_schema,
-            temperature=temperature,
-        )
-    except Exception:
-        gen_config = GenerationConfig(
-            response_mime_type="application/json",
-            temperature=temperature,
-        )
-    
-    try:
-        res = await asyncio.wait_for(
-            model.generate_content_async(contents=contents, generation_config=gen_config),
+        response = await asyncio.wait_for(
+            genai_client.aio.models.generate_content(
+                model=base_model_name,
+                contents=contents,
+                config=generate_config,
+            ),
             timeout=20.0
         )
     except asyncio.TimeoutError:
         raise TimeoutError("Vertex AI call exceeded 20s timeout")
 
-    clean_json = re.sub(r'```json\n|\n```|```', '', str(res.text)).strip()
+    # ── Parse response ──
+    clean_json = re.sub(r'```json\n|\n```|```', '', str(response.text)).strip()
     data = json.loads(clean_json) if clean_json else {}
-    um = res.usage_metadata
+    um = response.usage_metadata
     tokens = {
         "prompt_tokens": um.prompt_token_count if um else 0,
         "candidate_tokens": um.candidates_token_count if um else 0,
     }
     
     # ── Create cache for next call if we didn't have one ──
-    if not cached_content_id and shop_doc_id and config_version:
+    if not cached_content_name and shop_doc_id and config_version:
         try:
             from core.prompt_cache import set_cached_content_id
-            cached = CachedContent.create(
-                model_name=base_model_name,
+            cache_create_config = genai.types.CreateCachedContentConfig(
                 system_instruction=sys_inst,
                 contents=contents[:1] if contents else [],
                 ttl="7200s",
+            )
+            cached = genai_client.caches.create(
+                model=base_model_name,
+                config=cache_create_config,
             )
             await set_cached_content_id(shop_doc_id, config_version, cached.name)
             print(f"💾 Cache CREATED for shop {shop_doc_id}: {cached.name[:20]}...", flush=True)
@@ -97,29 +89,51 @@ async def call_agent_model(base_model_name, sys_inst, contents, response_schema,
 
 
 def call_agent_model_sync(base_model_name, sys_inst, contents, response_schema, temperature=0.2):
-    """Synchronous Vertex AI call (for simple use cases like embedding/greeting)."""
-    model = GenerativeModel(base_model_name, system_instruction=sys_inst)
-    try:
-        gen_config = GenerationConfig(
-            response_mime_type="application/json",
-            response_schema=response_schema,
-            temperature=temperature,
-        )
-    except Exception:
-        gen_config = GenerationConfig(
-            response_mime_type="application/json",
-            temperature=temperature,
-        )
+    """Synchronous Vertex AI call via google-genai SDK."""
     
-    res = model.generate_content(contents=contents, generation_config=gen_config)
-    clean_json = re.sub(r'```json\n|\n```|```', '', str(res.text)).strip()
+    config_dict = {
+        "response_mime_type": "application/json",
+        "temperature": temperature,
+        "system_instruction": sys_inst,
+    }
+    
+    if response_schema:
+        config_dict["response_json_schema"] = response_schema
+    
+    generate_config = genai.types.GenerateContentConfig(**config_dict)
+    
+    response = genai_client.models.generate_content(
+        model=base_model_name,
+        contents=contents,
+        config=generate_config,
+    )
+    
+    clean_json = re.sub(r'```json\n|\n```|```', '', str(response.text)).strip()
     data = json.loads(clean_json) if clean_json else {}
-    um = res.usage_metadata
+    um = response.usage_metadata
     tokens = {
         "prompt_tokens": um.prompt_token_count if um else 0,
         "candidate_tokens": um.candidates_token_count if um else 0,
     }
     return data, tokens
+
+
+def merge_tokens(data, tokens):
+    """Merge token counts into response dict."""
+    data.update(tokens)
+    return data
+
+
+def make_fallback_response(fallback_message="Connecting to human agent..."):
+    """Standard fallback when agent fails completely."""
+    return {
+        "is_complex": True,
+        "intent": "OTHER",
+        "extracted": {},
+        "reply": fallback_message,
+        "prompt_tokens": 0,
+        "candidate_tokens": 0,
+    }
 
 
 def merge_tokens(data, tokens):
