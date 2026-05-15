@@ -118,6 +118,26 @@ async def handle_escalation(shop_doc_id, acc_id, conv_id, user_id, token, agent_
     return "I apologize for the inconvenience. I've connected you with a human agent who will assist you shortly. Please wait a moment."
 
 
+# ── Keyword-based order state transitions ──
+ORDER_STATE_KEYWORDS = {
+    "COLLECTING": {
+        "ORDER_CONFIRMED": [r'\b(yes|ok|okay|confirm|sure|go ahead|ဟုတ်|အင်း|မှန်တယ်|မှာ|ယူမယ်|ဝယ်မယ်|တင်ပေး|do it|proceed)\b'],
+    },
+}
+
+
+def check_order_state_keywords(user_msg, current_state):
+    """Check if user message triggers an order state transition (keywords only, 0ms)."""
+    import re
+    msg_lower = user_msg.lower().strip()
+    state_kw = ORDER_STATE_KEYWORDS.get(current_state, {})
+    for new_state, patterns in state_kw.items():
+        for pattern in patterns:
+            if re.search(pattern, msg_lower):
+                return new_state
+    return None
+
+
 async def handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token, agent_id, prof, currency, final_data):
     """Save confirmed order to Firestore, update profile, clear history."""
     ident = prof.get("identification", {})
