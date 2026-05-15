@@ -201,6 +201,8 @@ async def process_core_logic(data):
         await _handle_refresh(acc_id, shop_doc_id)
         return
 
+    photo_context = ""
+
     # ── Append photo context to user message ──
     if photo_context:
         user_msg = f"{user_msg}\n\n[PHOTO CONTEXT]\n{photo_context}"
@@ -212,29 +214,6 @@ async def process_core_logic(data):
     media_parts = await download_media_parts(attachments)
     
     # ── 6b. Smart Photo Analysis ──
-    photo_context = ""
-    if attachments or media_parts:
-        try:
-            from agents.photo_analyzer import analyze_photo_context
-            photo_context = await analyze_photo_context(shop_doc_id, user_msg, order_state, len(attachments or []), media_parts)
-            if photo_context:
-                print(f"📸 Photo Analysis: {photo_context}", flush=True)
-        except Exception as e:
-            print(f"⚠️ Photo analyze error: {e}", flush=True)
-    
-    # ── 6b. Smart Photo Analysis ──
-    photo_context = ""
-    if attachments or media_parts:
-        try:
-            from agents.photo_analyzer import analyze_photo_context
-            photo_context = await analyze_photo_context(shop_doc_id, user_msg, order_state, len(attachments or []), media_parts)
-            if photo_context:
-                print(f"📸 Photo Analysis: {photo_context}", flush=True)
-        except Exception as e:
-            print(f"⚠️ Photo analyze error: {e}", flush=True)
-    
-    # ── 6b. Smart Photo Analysis ──
-    photo_context = ""
     if attachments or media_parts:
         try:
             from agents.photo_analyzer import analyze_photo_context
@@ -242,8 +221,7 @@ async def process_core_logic(data):
             if photo_context:
                 print(f"📸 Photo Analysis: {photo_context[:80]}...", flush=True)
         except Exception as e:
-            print(f"⚠️ Photo analysis skipped (import error): {e}", flush=True)
-            photo_context = ""
+            print(f"⚠️ Photo analysis error: {e}", flush=True)
     
     # ── 6c. URL Image Detection ──
     if not media_parts and not attachments:
