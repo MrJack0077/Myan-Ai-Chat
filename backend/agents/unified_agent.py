@@ -131,7 +131,22 @@ async def run_unified_agent(
         )
         clean = re.sub(r'```json\n|\n```|```', '', str(res.text)).strip()
         print(f"📋 Raw AI output ({len(clean)} chars): {clean[:200]}...", flush=True)
-        data = json.loads(clean) if clean else {}
+        
+        # ⚡ JSON repair: if AI output is truncated/invalid, try to extract reply
+        data = {}
+        try:
+            data = json.loads(clean)
+        except json.JSONDecodeError:
+            # Try to salvage: extract reply field with regex
+            reply_match = re.search(r'"reply"\s*:\s*"([^"]*)"', clean)
+            intent_match = re.search(r'"intent"\s*:\s*"([^"]*)"', clean)
+            if reply_match:
+                data["reply"] = reply_match.group(1)
+                print(f"⚡ JSON salvage: extracted reply via regex", flush=True)
+            if intent_match:
+                data["intent"] = intent_match.group(1)
+            if not data:
+                print(f"⚠️ JSON parse failed completely — returning empty", flush=True)
         
         # ⚡ Normalize: AI sometimes returns nested structures or wrong field names
         if isinstance(data.get("response"), dict):
