@@ -256,6 +256,15 @@ async def process_core_logic(data):
     print(f"⏱️  [4] Greeting check done: {(time.time()-t4):.2f}s", flush=True)
     t5 = time.time()
 
+    # ── 8b. Context-aware override: if AI just listed products, reset GREETING ──
+    if kw_intent == "GREETING" and chat_history:
+        last_ai_lines = [l for l in chat_history.split('\n') if l.startswith('AI:')]
+        if last_ai_lines:
+            indicators = ['MMK', 'ကျပ်', 'ရှိပါတယ်', 'တို့ရှိ', 'ပစ္စည်း', 'ဖုန်း', 'watch', 'phone']
+            if any(ind in last_ai_lines[-1] for ind in indicators):
+                kw_intent = None
+                print(f"⚡ Context override: AI listed products → NOT greeting", flush=True)
+
     # ── 9. Embedding Research (only if needed) ──
     SKIP_EMBEDDING_INTENTS = {"GREETING", "COMPLAINT_OR_HUMAN", "OUT_OF_DOMAIN", 
                                "DELIVERY", "PAYMENT", "POLICY_FAQ", "SLIP_UPLOAD"}
