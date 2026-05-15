@@ -14,11 +14,13 @@ async def update_automation_settings(shop_id: str, settings: dict):
         })
         # Invalidate all caches for this shop immediately
         from core.cache_manager import invalidate_shop_caches
+        from core.prompt_cache import invalidate_system_prompt_cache
         doc = db.collection("shops").document(shop_id).get()
         if doc.exists:
             acc_ids = doc.to_dict().get("sendpulseBotIds", [])
             acc_id = acc_ids[0] if acc_ids else ""
             await invalidate_shop_caches(shop_id, acc_id=acc_id)
+            invalidate_system_prompt_cache(shop_id)  # ⚡ Invalidate Vertex Cache
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

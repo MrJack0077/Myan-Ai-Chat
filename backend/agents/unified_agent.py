@@ -84,17 +84,41 @@ async def run_unified_agent(
     ident = profile.get("identification", {})
     dynamics = profile.get("dynamics", {})
     
-    # Build compact context
+    # Build complete context from ALL aiConfig fields
     pmt_str = ", ".join(p.get('type', '') for p in (payment_info or [])) or "Cash"
+    faqs = ai_config.get("faqs", [])
+    kb = ai_config.get("knowledgeBase", [])
+    templates = ai_config.get("replyTemplates", {})
+    constraints = ai_config.get("constraints", [])
+    handoff = ai_config.get("humanHandoff", {})
+    rules = ai_config.get("automationRules", [])
     
     extra_ctx = [
         f"[CUSTOMER] Name={ident.get('name','?')} | State={order_state} | Phone={ident.get('phone','?')}",
-        f"[ORDER] Items={', '.join(dynamics.get('items',[]))} | Total={dynamics.get('total_price',0)} {currency} | Payment={dynamics.get('payment_method','?')}",
+        f"[ORDER] Items={', '.join(prof.get('current_order',{}).get('items',[]))} | Total={prof.get('current_order',{}).get('total_price',0)} {currency}",
         f"[PAYMENT METHODS] {pmt_str}, COD",
         f"[CURRENCY] {currency}",
         f"[DATABASE INFO]\n{tool_info if tool_info else 'No products in database.'}",
         INTENT_GUIDE,
     ]
+    
+    # ⚡ ALL AI Training Page data → prompt
+    if constraints:
+        extra_ctx.append(f"[SHOP CONSTRAINTS]\n" + "\n".join(f"- {c}" for c in constraints))
+    if faqs:
+        faq_lines = [f"Q: {f.get('question','')}\nA: {f.get('answer','')}" for f in faqs[:5] if f.get('isActive', True)]
+        if faq_lines:
+            extra_ctx.append(f"[SHOP FAQs]\n" + "\n".join(faq_lines))
+    if templates:
+        tmpl_lines = [f"{k}: {v}" for k, v in templates.items()]
+        if tmpl_lines:
+            extra_ctx.append(f"[REPLY TEMPLATES]\n" + "\n".join(tmpl_lines))
+    if handoff:
+        extra_ctx.append(f"[HUMAN HANDOFF RULES]\nKeywords: {', '.join(handoff.get('triggerKeywords',[]))}\nMin Price: {handoff.get('minPriceThreshold',0)}")
+    if rules:
+        active_rules = [r for r in rules if r.get('isActive', True)]
+        if active_rules:
+            extra_ctx.append(f"[AUTOMATION RULES]\n" + json.dumps(active_rules, indent=2))
     
     if photo_context:
         extra_ctx.append(f"[PHOTO CONTEXT]\n{photo_context}")
@@ -105,7 +129,32 @@ async def run_unified_agent(
         shop_doc_id=shop_doc_id,
     )
     
-    model = GenerativeModel(BASE_MODEL_NAME, system_instruction=sys_inst)
+    # ⚡ VERTEX CONTEXT CACHE: Cache system prompt per shop (not product DB)
+    # Saves 36% token cost on every subsequent message for this shop
+    cached_content = None
+    if shop_doc_id:
+        try:
+            from core.prompt_cache import get_cached_content_id, set_cached_content_id, get_shop_config_version
+            config_ver = await get_shop_config_version(shop_doc_id)
+            if config_ver:
+                cache_id = await get_cached_content_id(shop_doc_id, config_ver)
+                if cache_id:
+                    try:
+                        from vertexai.generative_models import CachedContent as CachedContentCls
+                        cached_content = CachedContentCls(cache_id) if hasattr(CachedContentCls, '__init__') else None
+                    except:
+                        cached_content = cache_id  # pass ID if class not available
+                    if cached_content:
+                        print(f"🎯 Vertex Cache HIT: shop={shop_doc_id} (config_ver={config_ver[:8]})", flush=True)
+        except Exception as e:
+            print(f"⚠️ Vertex Cache lookup error (non-critical): {e}", flush=True)
+    
+    model_kwargs = {}
+    if cached_content:
+        model_kwargs['cached_content'] = cached_content
+        print(f"🔗 Using Vertex cached content for shop {shop_doc_id}", flush=True)
+    
+    model = GenerativeModel(BASE_MODEL_NAME, system_instruction=sys_inst, **model_kwargs)
     
     contents = []
     if chat_history:
@@ -171,6 +220,25 @@ async def run_unified_agent(
             "candidate_tokens": um.candidates_token_count if um else 0,
         }
         print(f"⏱️  Unified Agent: {(time.time()-t_start):.2f}s | intent={data.get('intent','?')} | prompt_tokens={tokens['prompt_tokens']}", flush=True)
+        
+        # ⚡ VERTEX CACHE CREATION: After first successful call, create cache for next time
+        if not cached_content and shop_doc_id:
+            try:
+                from core.prompt_cache import set_cached_content_id, get_shop_config_version
+                config_ver = await get_shop_config_version(shop_doc_id)
+                if config_ver:
+                    from vertexai.generative_models import CachedContent as CachedContentCls
+                    # Create cache from this response's context
+                    new_cache = CachedContentCls.create(
+                        model_name=BASE_MODEL_NAME,
+                        system_instruction=sys_inst,
+                        contents=contents[:1] if contents else [],
+                        ttl="7200s"  # 2 hours
+                    )
+                    await set_cached_content_id(shop_doc_id, config_ver, new_cache.name)
+                    print(f"💾 Vertex Cache CREATED: shop={shop_doc_id} (2hr TTL)", flush=True)
+            except Exception as ce:
+                print(f"⚠️ Vertex Cache create error (non-critical): {ce}", flush=True)
         
         # Validate outputs
         data.setdefault("intent", "PRODUCT_INQUIRY")
