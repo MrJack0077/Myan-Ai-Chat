@@ -12,15 +12,18 @@ ADD_TAG_URL = "https://api.sendpulse.com/chatbots/v2/bot/{bot_id}/contacts/{cont
 
 
 async def send_typing(acc_id, user_id, token):
-    """Send typing indicator via SendPulse (fire-and-forget)."""
+    """Send typing indicator via SendPulse (fire-and-forget).
+    Skips v2/v1 fallback for Telegram bots — they always 404."""
 
     async def _send():
-        r_type = await bg_post(TYPING_URL, {"bot_id": acc_id, "contact_id": user_id, "action": "typing"}, token, timeout=3.0)
+        # Telegram bots: skip v2/v1, go straight to Telegram endpoint
+        if user_id and user_id.startswith("tg_"):
+            await bg_post("https://api.sendpulse.com/messenger/contacts/sendTyping", {"contact_id": user_id}, token, timeout=3.0)
+            return
+        r_type = await bg_post(TYPING_URL, {"bot_id": acc_id, "contact_id": user_id, "action": "typing"}, token, timeout=2.0)
         if r_type and r_type.status_code == 404:
             alt_url = TYPING_URL.replace("/v2", "")
-            r2 = await bg_post(alt_url, {"bot_id": acc_id, "contact_id": user_id, "action": "typing"}, token, timeout=3.0)
-            if r2 and r2.status_code == 404:
-                await bg_post("https://api.sendpulse.com/messenger/contacts/sendTyping", {"contact_id": user_id}, token, timeout=3.0)
+            await bg_post(alt_url, {"bot_id": acc_id, "contact_id": user_id, "action": "typing"}, token, timeout=2.0)
 
     asyncio.create_task(_send())
 

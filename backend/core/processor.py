@@ -93,7 +93,7 @@ def _calculate_typing_delay(reply_text: str) -> float:
     delay = base_delay + variation
     
     # Apply limits (1.5s max for fast replies)
-    delay = max(0.5, min(delay, 1.5))
+    delay = max(0.3, min(delay, 1.0))
     return round(delay, 2)
 
 
@@ -249,7 +249,14 @@ async def process_core_logic(data):
     t4 = time.time()
 
     # ── 8. Fast Greeting Router ──
+    # ⚡ PRE-CHECK: Use keyword classifier (0ms) to skip AI greeting router for clear domain requests
+    kw_intent, _ = fast_intent_classify(user_msg, order_state)
     is_likely_greeting = len(user_msg) <= 50 and not media_parts and not attachments
+    
+    # If keyword classifier already knows this is a product inquiry/order, skip the 2-4s AI call
+    if is_likely_greeting and kw_intent not in ("GREETING",):
+        print(f"⚡ Greeting Router: SKIP (keyword={kw_intent}) — saving 2-4s", flush=True)
+        is_likely_greeting = False
     
     if is_likely_greeting:
         # Start research in parallel — if not a greeting, results will be ready

@@ -3,8 +3,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-print("👋 hi from Myan-Ai-Chat backend!", flush=True)
-
 from core.worker import worker_process
 from api.routes import webhook, shops, cache, cron, products
 
