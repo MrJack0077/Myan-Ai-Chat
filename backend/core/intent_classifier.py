@@ -11,7 +11,7 @@ import re
 KEYWORD_INTENTS = [
     # ── PRODUCT_INQUIRY ──
     (r'\b(ဈေး|ဘယ်လောက်|စျေး|ဘယ်လောက်လဲ|ဈေးနှုန်း|price|how much|cost|how many kyat)\b', 'PRODUCT_INQUIRY', True),
-    (r'\b(အရောင်|ဆိုဒ်|size|color|colour|အနီ|အပြာ|အစိမ်း|အနက်|အဖြူ)\b', 'PRODUCT_INQUIRY', True),
+    (r'\b(အရောင်|ဆိုဒ်|size|colors?|colou?rs?|အနီ|အပြာ|အစိမ်း|အနက်|အဖြူ)\b', 'PRODUCT_INQUIRY', True),
     (r'\b(ရှိလား|ရလား|ရတာလား|ရပါသလား|ရှိပါသလား|ရနိုင်လား|available|in stock|stock|န်းလား)\b', 'PRODUCT_INQUIRY', True),
     (r'\b(ပစ္စည်း|product|item|ပစ္စည်းတွေ|products|items|ပဲရတာ|ဘာတွေရ|ဘာရလဲ|ဘာတွေရှိ)\b', 'PRODUCT_INQUIRY', True),
 
