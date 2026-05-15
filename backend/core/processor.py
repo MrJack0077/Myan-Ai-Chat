@@ -251,11 +251,14 @@ async def process_core_logic(data):
         tool_info, msg_emb = research_result
         print(f"⏱️  Embedding Research: {(time.time()-t_research):.2f}s", flush=True)
     
-    # ── 10. UNIFIED AGENT (ONE AI call replaces Greeting Router + Automation + Product/Order/Media) ──
+    # ── 10. UNIFIED AGENT + AUTOMATION AGENT (parallel AI calls) ──
     from agents.unified_agent import run_unified_agent
+    from agents.automation_agent import run_automation_agent
     
     print(f"⚡ Unified Agent: ONE AI call (kw={kw_intent}, state={order_state})...", flush=True)
-    unified_result = await run_unified_agent(
+    
+    # Run unified agent (main reply) and automation agent (tags + preferences) in parallel
+    unified_task = asyncio.create_task(run_unified_agent(
         user_msg=user_msg,
         chat_history=chat_history,
         profile=prof,
