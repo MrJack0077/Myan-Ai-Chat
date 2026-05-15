@@ -479,7 +479,8 @@ async def _cached_assemble(shop_doc_id, config_hash, ai_config, intent, extra_co
     
     if extra_context:
         blocks.append("")
-        blocks.extend(extra_context)
+        for item in extra_context:
+            blocks.append(str(item))
     
     result = "\n".join(blocks)
     
@@ -540,7 +541,8 @@ def _build_system_prompt_sync(ai_config, intent=None, extra_context=None, shop_c
     
     if extra_context:
         blocks.append("")
-        blocks.extend(extra_context)
+        for item in extra_context:
+            blocks.append(str(item))
     
     return "\n".join(blocks)
 

@@ -123,13 +123,14 @@ async def run_unified_agent(
                 contents=contents,
                 generation_config=GenerationConfig(
                     response_mime_type="application/json",
-                    response_schema=UnifiedAgentResponse,
+                    # ⚡ response_schema removed — Vertex SDK has bugs with TypedDict
                     temperature=0.2,
                 ),
             ),
             timeout=8.0  # ⚡ 8s timeout — don't keep customer waiting
         )
         clean = re.sub(r'```json\n|\n```|```', '', str(res.text)).strip()
+        print(f"📋 Raw AI output ({len(clean)} chars): {clean[:200]}...", flush=True)
         data = json.loads(clean) if clean else {}
         
         um = res.usage_metadata
@@ -150,7 +151,9 @@ async def run_unified_agent(
         return data
 
     except Exception as e:
+        import traceback
         print(f"🔥 Unified Agent Error: {e}", flush=True)
+        print(f"📋 Traceback:\n{traceback.format_exc()}", flush=True)
         return _unified_fallback(e)
 
 
