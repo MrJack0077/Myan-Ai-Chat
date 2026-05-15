@@ -22,17 +22,17 @@ async def embed_text(req: EmbedRequest):
                 task_type='retrieval_document',
                 output_dimensionality=768,
             )
-            emb_res = await genai_client.aio.embeddings.create(
+            emb_res = await genai_client.aio.models.embed_content(
                 model=EMBEDDING_MODEL_NAME,
                 contents=[req.text],
                 config=emb_config,
             )
-            if emb_res and emb_res.embedding:
-                return {"status": "success", "embedding": emb_res.embedding, "provider": "vertex"}
+            if emb_res and emb_res.embeddings:
+                return {"status": "success", "embedding": emb_res.embeddings[0].values, "provider": "vertex"}
         except Exception as e:
             print(f"Vertex embedding failed, trying API key fallback: {e}")
-        # Fallback to API Key mode (uses GEMINI_API_KEY env var)
-        emb_res = await genai_client.aio.embeddings.create(
+        # Fallback to API Key mode
+        emb_res = await genai_client.aio.models.embed_content(
             model=EMBEDDING_MODEL_NAME,
             contents=[req.text],
             config=genai.types.EmbedContentConfig(
@@ -40,7 +40,7 @@ async def embed_text(req: EmbedRequest):
                 output_dimensionality=768,
             ),
         )
-        return {"status": "success", "embedding": emb_res.embedding, "provider": "studio"}
+        return {"status": "success", "embedding": emb_res.embeddings[0].values, "provider": "studio"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

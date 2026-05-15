@@ -29,12 +29,12 @@ async def generate_product_embedding(product_data):
             task_type="retrieval_document",
             output_dimensionality=768,
         )
-        res = await genai_client.aio.embeddings.create(
+        res = await genai_client.aio.models.embed_content(
             model=EMBEDDING_MODEL_NAME,
             contents=[text_to_embed],
             config=emb_config,
         )
-        return res.embedding
+        return res.embeddings[0].values if res.embeddings else None
     except Exception as e:
         print(f"Error embedding product {name}: {e}")
         return None
