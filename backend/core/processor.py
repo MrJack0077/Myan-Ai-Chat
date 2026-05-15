@@ -448,8 +448,30 @@ async def process_core_logic(data):
             intent_type, automation_reply=reply_text,
             photo_context=photo_context
         )
-        reply_text = final_data.get("reply", "...")
+        reply_text = final_data.get("reply", "") or ""
         is_complex = final_data.get("is_complex", False)
+        
+        # ⚡ EMPTY REPLY FALLBACK: If AI returned no reply, generate safe default
+        if not reply_text.strip():
+            if lang.lower() in ["myanmar", "burmese", "mm"]:
+                if intent_type in ("PRODUCT_INQUIRY",):
+                    reply_text = "ရှာမတွေ့ပါဘူးရှင့်။ နာမည်အပြည့်အစုံလေး ပြောပေးပါဦးနော်။"
+                elif intent_type == "DELIVERY":
+                    reply_text = "ပို့ဆောင်ရေးအကြောင်း ပြောပြပေးပါမယ်ရှင့်။ ဘယ်မြို့လဲပြောပေးပါဦး။"
+                elif intent_type == "PAYMENT":
+                    reply_text = "ငွေပေးချေနည်းတွေ ရှင်းပြပေးပါမယ်ရှင့်။"
+                else:
+                    reply_text = "ဘာကူညီပေးရမလဲရှင့်။"
+            else:
+                if intent_type in ("PRODUCT_INQUIRY",):
+                    reply_text = "I couldn't find that item. Could you share the exact product name?"
+                elif intent_type == "DELIVERY":
+                    reply_text = "Let me share our delivery info. Which city are you in?"
+                elif intent_type == "PAYMENT":
+                    reply_text = "Here are our payment options. Let me know if you need details."
+                else:
+                    reply_text = "How can I help you today?"
+            print(f"⚠️ Empty AI reply → using fallback for intent={intent_type}", flush=True)
         print(f"⏱️  [6] Agent Routing (product/order/media): {(time.time()-t_agent):.2f}s", flush=True)
 
     # ── 14. Response & Save ──

@@ -91,7 +91,23 @@ async def run_product_agent(user_msg, tool_info, ai_cfg, policies, profile, base
             temperature=0.2,
             shop_doc_id=shop_doc_id,
         )
-        return merge_tokens(data, tokens)
+        result = merge_tokens(data, tokens)
+        
+        # ⚡ Fallback: if AI returns empty reply but we have products in DB
+        if not result.get("reply", "").strip() and tool_info and "Name:" in tool_info:
+            import re
+            # Extract first 3 product names from tool_info
+            names = re.findall(r'Name:\s*([^|]+)', tool_info)
+            if names:
+                lang = ai_cfg.get('responseLanguage', 'Myanmar')
+                if lang.lower() in ("myanmar", "burmese", "mm"):
+                    result["reply"] = f"ဒီမှာ ရှိတဲ့ပစ္စည်းတွေပါရှင့် — {', '.join(names[:3])}။ ဘယ်ဟာလေးကို စိတ်ဝင်စားလဲရှင့်။"
+                else:
+                    result["reply"] = f"Here's what we have — {', '.join(names[:3])}. Which one interests you?"
+            else:
+                result["reply"] = "ရှာမတွေ့ပါဘူးရှင့်။ နာမည်အပြည့်အစုံလေး ပြောပေးပါဦးနော်。" if lang.lower() in ("myanmar", "burmese", "mm") else "I couldn't find that. Could you share the exact product name?"
+        
+        return result
     except Exception as e:
         print(f"🔥 Product Agent Error: {e}")
         return make_fallback_response(ai_cfg.get('fallbackMessage', 'Connecting to human agent...'))
