@@ -233,37 +233,10 @@ async def process_core_logic(data):
     print(f"⏱️  [3] Config+Typing+History: {(time.time()-t3):.2f}s", flush=True)
     t4 = time.time()
 
-    # ── 8. Fast Keywords + Hardcoded Greeting (0ms) ──
+    # ── 8. Keyword Intent Classify (0ms) ──
     kw_intent, _ = fast_intent_classify(user_msg, order_state)
-    
-    # ⚡ 0ms GREETING: Exact match only → hardcoded reply, no AI at all
-    if kw_intent == "GREETING" and len(user_msg) <= 30 and not media_parts and not attachments:
-        # Use session-based check: only greet on FIRST message
-        if prof["dynamics"].get("message_count", 0) <= 1:
-            print(f"⚡ Greeting: KEYWORD hardcoded 0ms (msg_count={prof['dynamics'].get('message_count',0)})", flush=True)
-            from .greeting_router import _hardcoded_greeting_reply
-            reply_text = _hardcoded_greeting_reply(lang)
-            await add_to_history(shop_doc_id, conv_id, "AI", reply_text, max_len=10)
-            await send_sendpulse_messages(acc_id, user_id, {"intent": "GREETING"}, reply_text, token)
-            await increment_shop_tokens(acc_id, 0)
-            print(f"⏱️  [TOTAL] Pipeline: {(time.time()-t_start):.2f}s (hardcoded greeting)", flush=True)
-            return
-        else:
-            # Returning customer says "hi" → skip greeting, go straight to intent
-            print(f"⚡ Greeting SKIP: returning customer (msg_count={prof['dynamics'].get('message_count',0)})", flush=True)
-    
-    chat_history = await get_history(shop_doc_id, conv_id)
-    print(f"⏱️  [4] Greeting check done: {(time.time()-t4):.2f}s", flush=True)
+    # ⚡ NO Greeting Router — all messages go to Unified Agent
     t5 = time.time()
-
-    # ── 8b. Context-aware override: if AI just listed products, reset GREETING ──
-    if kw_intent == "GREETING" and chat_history:
-        last_ai_lines = [l for l in chat_history.split('\n') if l.startswith('AI:')]
-        if last_ai_lines:
-            indicators = ['MMK', 'ကျပ်', 'ရှိပါတယ်', 'တို့ရှိ', 'ပစ္စည်း', 'ဖုန်း', 'watch', 'phone']
-            if any(ind in last_ai_lines[-1] for ind in indicators):
-                kw_intent = None
-                print(f"⚡ Context override: AI listed products → NOT greeting", flush=True)
 
     # ── 9. Embedding Research (only if needed) ──
     SKIP_EMBEDDING_INTENTS = {"GREETING", "COMPLAINT_OR_HUMAN", "OUT_OF_DOMAIN", 
