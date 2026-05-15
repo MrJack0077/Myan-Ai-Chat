@@ -1,4 +1,5 @@
 """Greeting vs Domain Request router using Vertex AI."""
+import asyncio
 import json
 import time
 import random
@@ -53,9 +54,12 @@ JSON only: {{"intent": "GREETING" | "DOMAIN_REQUEST", "reply": "reply if GREETIN
 
     try:
         router_model = GenerativeModel(FAST_MODEL_NAME)
-        router_res = await router_model.generate_content_async(
-            contents=[router_sys, f"User: {user_msg}"],
-            generation_config=GenerationConfig(response_mime_type="application/json", temperature=0.1),
+        router_res = await asyncio.wait_for(
+            router_model.generate_content_async(
+                contents=[router_sys, f"User: {user_msg}"],
+                generation_config=GenerationConfig(response_mime_type="application/json", temperature=0.1),
+            ),
+            timeout=6.0  # ⚡ 6s timeout — don't keep customer waiting
         )
         router_data = json.loads(router_res.text.strip())
         print(f"🚦 Router: intent={router_data.get('intent')} | took={time.time() - router_start:.2f}s")
@@ -70,9 +74,12 @@ JSON only: {{"intent": "GREETING" | "DOMAIN_REQUEST", "reply": "reply if GREETIN
                 # AI reply empty or too short → use BASE model for quality greeting
                 try:
                     greet_model = GenerativeModel(BASE_MODEL_NAME)
-                    greet_res = await greet_model.generate_content_async(
-                        contents=[f"You are a friendly shop assistant. Reply warmly to this customer in {lang}. Keep it short (1-2 sentences). Be natural.\n\nCustomer: {user_msg}"],
-                        generation_config=GenerationConfig(temperature=0.7, max_output_tokens=60),
+                    greet_res = await asyncio.wait_for(
+                        greet_model.generate_content_async(
+                            contents=[f"You are a friendly shop assistant. Reply warmly to this customer in {lang}. Keep it short (1-2 sentences). Be natural.\n\nCustomer: {user_msg}"],
+                            generation_config=GenerationConfig(temperature=0.7, max_output_tokens=60),
+                        ),
+                        timeout=4.0  # ⚡ 4s timeout for greeting reply
                     )
                     reply_text = greet_res.text.strip()
                     if r:

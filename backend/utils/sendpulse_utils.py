@@ -74,7 +74,7 @@ async def send_sendpulse_messages(acc_id, user_id, final_data, reply_text, token
         
         print(f"📤 Posting to SendPulse: {send_url} with payload type {msg.get('type')} for contact {user_id}", flush=True)
         try:
-            resp = await bg_post(send_url, payload, token, timeout=5.0)
+            resp = await bg_post(send_url, payload, token, timeout=3.0)
             print(f"📬 SendPulse Answer (v2): {resp.status_code if resp else 'No Resp'}", flush=True)
             if resp and resp.status_code == 404:
                 # Smart fallback: detect Telegram users (ID starts with tg_) and try Telegram first
@@ -86,15 +86,11 @@ async def send_sendpulse_messages(acc_id, user_id, final_data, reply_text, token
                         "https://api.sendpulse.com/telegram/contacts/send",
                     ]
                 else:
-                    # Try most common channels first (Messenger, Telegram)
+                    # Try Messenger first (most common), then Telegram, then v1, then others
                     fallbacks = [
                         "https://api.sendpulse.com/messenger/contacts/send",
                         "https://api.sendpulse.com/telegram/contacts/send",
                         f"https://api.sendpulse.com/chatbots/v1/bot/{acc_id}/messages/send",
-                        "https://api.sendpulse.com/instagram/contacts/send",
-                        "https://api.sendpulse.com/whatsapp/contacts/send",
-                        "https://api.sendpulse.com/facebook/contacts/send",
-                        "https://api.sendpulse.com/viber/contacts/send"
                     ]
                 for alt_url in fallbacks:
                     print(f"⚠️ v2 endpoint 404. Trying fallback: {alt_url}", flush=True)
@@ -104,7 +100,7 @@ async def send_sendpulse_messages(acc_id, user_id, final_data, reply_text, token
                     elif "chatbots" not in alt_url:
                         p = fallback_payload
                         
-                    resp = await bg_post(alt_url, p, token, timeout=5.0)
+                    resp = await bg_post(alt_url, p, token, timeout=3.0)
                     print(f"📬 Fallback Answer ({alt_url}): {resp.status_code if resp else 'No Resp'}", flush=True)
                     if resp and resp.status_code not in (404, 401, 422):
                         break
