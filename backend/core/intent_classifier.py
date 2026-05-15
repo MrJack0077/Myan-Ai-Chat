@@ -75,12 +75,32 @@ def fast_intent_classify(user_msg: str, order_state: str = "NONE"):
     msg_lower = user_msg.lower().strip()
     msg_original = user_msg.strip()
 
-    # If message is very short and simple, likely a greeting/acknowledgment
-    if len(msg_original) <= 15 and not any(c in msg_original for c in '?？'):
-        for pattern, intent, skip in KEYWORD_INTENTS:
-            if re.search(pattern, msg_lower):
-                return intent, skip
-        return "GREETING", True  # short message = probably greeting
+    # ── PHASE 1: Check keywords FIRST (before length-based guessing) ──
+    # Many short messages are product names/brands, not greetings
+    matched_intent = None
+    for pattern, intent, skip in KEYWORD_INTENTS:
+        if re.search(pattern, msg_lower):
+            if skip:
+                return intent, True  # High confidence → done
+            else:
+                if matched_intent is None:
+                    matched_intent = intent
+    
+    # ── PHASE 2: Length-based fallback (only for truly ambiguous short msgs) ──
+    # Only classify as GREETING if:
+    # - VERY short (≤10 chars, not ≤15)
+    # - No special chars (?！)
+    # - Keyword matcher found nothing above
+    # - Does NOT contain known brand-like patterns (capitalized words, model numbers)
+    if len(msg_original) <= 10 and not any(c in msg_original for c in '?？'):
+        # Check if it looks like a brand/product name (capitalized, has numbers, etc.)
+        has_brand_pattern = bool(re.search(r'[A-Z0-9]', msg_original))
+        if not has_brand_pattern and not matched_intent:
+            return "GREETING", True
+    
+    # If keyword found a medium-confidence intent, return it
+    if matched_intent:
+        return matched_intent, False
 
     # Check complex keywords first (always need automation)
     for pattern in COMPLEX_KEYWORDS:
