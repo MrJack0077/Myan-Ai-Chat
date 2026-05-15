@@ -201,7 +201,7 @@ async def run_unified_agent(
         if isinstance(data.get("response"), dict):
             # AI returned {response: {text: "...", ...}} → extract text
             inner = data["response"]
-            data["reply"] = inner.get("text") or inner.get("reply") or ""
+            data["reply"] = inner.get("text") or inner.get("reply") or inner.get("response_text") or inner.get("message") or ""
             if "intent" in inner and not data.get("intent"):
                 data["intent"] = inner["intent"]
         elif isinstance(data.get("response"), str):
