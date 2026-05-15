@@ -138,7 +138,7 @@ def check_order_state_keywords(user_msg, current_state):
     return None
 
 
-async def handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token, agent_id, prof, currency, final_data):
+async def handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token, agent_id, prof, currency, final_data, delivery_info=None):
     """Save confirmed order to Firestore, update profile, clear history."""
     ident = prof.get("identification", {})
     curr = prof.get("current_order", {})
@@ -150,6 +150,7 @@ async def handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token
     total_price = curr.get('total_price', 0)
     deli_charge = curr.get('deli_charge', 0)
     item_qty = curr.get('item_qty', 1)
+    address = curr.get('address', '')
     
     # ── Auto-calculate delivery charge from address ──
     if not deli_charge and delivery_info and address:
