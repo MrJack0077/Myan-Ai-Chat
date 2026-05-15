@@ -133,11 +133,22 @@ async def run_unified_agent(
         print(f"📋 Raw AI output ({len(clean)} chars): {clean[:200]}...", flush=True)
         data = json.loads(clean) if clean else {}
         
-        # ⚡ Normalize: AI sometimes returns "response" instead of "reply"
-        if "response" in data and not data.get("reply"):
+        # ⚡ Normalize: AI sometimes returns nested structures or wrong field names
+        if isinstance(data.get("response"), dict):
+            # AI returned {response: {text: "...", ...}} → extract text
+            inner = data["response"]
+            data["reply"] = inner.get("text") or inner.get("reply") or ""
+            if "intent" in inner and not data.get("intent"):
+                data["intent"] = inner["intent"]
+        elif isinstance(data.get("response"), str):
             data["reply"] = data.pop("response")
+        
         if "question" in data and not data.get("reply"):
             data["reply"] = data.pop("question")
+        if "answer" in data and not data.get("reply"):
+            data["reply"] = data.pop("answer")
+        if "message" in data and not data.get("reply"):
+            data["reply"] = data.pop("message")
         
         um = res.usage_metadata
         tokens = {

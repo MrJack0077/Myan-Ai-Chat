@@ -272,6 +272,10 @@ async def process_core_logic(data):
     
     intent_type = unified_result.get("intent") or kw_intent or "PRODUCT_INQUIRY"
     reply_text = unified_result.get("reply", "")
+    # ⚡ Safety: ensure reply is string (AI sometimes returns dict)
+    if isinstance(reply_text, dict):
+        reply_text = reply_text.get("text") or reply_text.get("reply") or ""
+    reply_text = str(reply_text) if reply_text else ""
     is_complex = unified_result.get("is_complex", False)
     extracted = unified_result.get("extracted", {})
     total_tokens = unified_result.get("prompt_tokens", 0) + unified_result.get("candidate_tokens", 0)
