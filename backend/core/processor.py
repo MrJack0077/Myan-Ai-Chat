@@ -215,44 +215,16 @@ async def process_core_logic(data):
     # ── 6. Download media ──
     media_parts = await download_media_parts(attachments)
     
-    # ── 6b. Smart Photo Analysis ──
+    # ⚡ SKIP separate AI Vision — unified agent handles images directly (multimodal)
     if attachments or media_parts:
-        # Keyword quick check first (0ms) — detect payment slips without AI
+        # Keyword quick check for payment slip (0ms)
         import re as _re
         slip_keywords = r'\b(slip|paid|payment|transfer|ငွေ|ပေးချေ|လွှဲ|ငွေလွှဲ|receipt|transaction)\b'
-        is_likely_slip = bool(_re.search(slip_keywords, user_msg, _re.IGNORECASE))
-        
-        if is_likely_slip:
-            photo_context = "[PAYMENT SLIP DETECTED] This appears to be a payment receipt. Process it as payment verification."
-            print(f"⚡ Photo Quick Check: Payment slip detected (keyword) — skipping AI Vision", flush=True)
+        if bool(_re.search(slip_keywords, user_msg, _re.IGNORECASE)):
+            photo_context = "[PAYMENT SLIP DETECTED] Process as payment verification."
+            print(f"⚡ Payment slip detected (keyword) — unified agent will verify image", flush=True)
         else:
-            try:
-                from agents.photo_analyzer import analyze_photo_context
-                photo_context = await analyze_photo_context(shop_doc_id, user_msg, order_state, len(attachments or []), media_parts)
-                if photo_context:
-                    print(f"📸 Photo Analysis (AI Vision): {photo_context[:80]}...", flush=True)
-            except ImportError as e:
-                print(f"⚠️ Photo analyzer import failed: {e}", flush=True)
-            except Exception as e:
-                print(f"⚠️ Photo analysis error: {e}", flush=True)
-    
-    # ── 6c. URL Image Detection ──
-    if not media_parts and not attachments:
-        import re as _re
-        urls = _re.findall(r'https?://[^\s]+', user_msg)
-        if urls:
-            for url in urls[:1]:  # Check first URL only
-                if any(x in url.lower() for x in ['image', 'photo', 'img', 'jpg', 'png', 'jpeg', 'webp', 'file', 'api/tel', 'sendpulse']):
-                    print(f"🔗 Detected image URL in message — analyzing...", flush=True)
-                    try:
-                        from agents.photo_analyzer import analyze_photo_context
-                        # Treat URL as attachment — analyze
-                        if not photo_context:
-                            photo_context = "🔗 Customer sent an image link. Check if the image matches any shop product."
-                            print(f"📸 URL Photo context: {photo_context}", flush=True)
-                    except Exception:
-                        pass
-                    break
+            photo_context = "📸 Customer sent an image. Analyze it naturally with the message."
     
     # ── 7. Save to history ──
     hist_msg = user_msg if user_msg else ("[Voice Message]" if any("audio" in p.get("mime_type","") for p in media_parts) else ("[Photo]" if media_parts else "[Voice/Image/Payload]"))
@@ -389,7 +361,11 @@ async def process_core_logic(data):
     # ── 14. Response & Save ──
     await add_to_history(shop_doc_id, conv_id, "AI", reply_text, max_len=10)
     
-    # ── 14b. Two-Tier Memory: Update conversation summary every N messages ──
+    # ⚡ RELEASE LOCK NOW — don't wait for post-processing
+    # If network error occurs during post-processing, user won't be blocked for 30s
+    await _release_user_lock(user_id)
+    
+    # Background: Two-Tier Memory summary
     updated_history = await get_history(shop_doc_id, conv_id)
     if needs_summarization(updated_history):
         print(f"🧠 Two-Tier Memory: Summarizing conversation for {user_id}...", flush=True)
@@ -405,7 +381,7 @@ async def process_core_logic(data):
         await asyncio.sleep(typing_delay)
         print(f"⌨️ Typing delay: {typing_delay:.1f}s for {len(reply_text)} chars", flush=True)
     
-    await send_sendpulse_messages(acc_id, user_id, final_data, reply_text, token)
+    await send_sendpulse_messages(acc_id, user_id, final_data, reply_text, token, channel=shop.get('channel', ''))
 
     # ── 15. Order Confirmation ──
     order_intent = final_data.get("intent", "")
@@ -425,25 +401,10 @@ async def process_core_logic(data):
 
     await increment_shop_tokens(acc_id, total_tokens)
     
-    # ── Track AI tokens + channel usage (always active) ──
-    import google.cloud.firestore as firestore_module
-    try:
-        updates = {"ai_tokens_used": firestore_module.Increment(total_tokens)}
-        
-        # Track channel usage by bot_id
-        bot_id_for_tracking = acc_id
-        if bot_id_for_tracking:
-            channel_field = f"channel_msg_count.{bot_id_for_tracking}"
-            updates[channel_field] = firestore_module.Increment(1)
-            # Also mark last used timestamp
-            updates[f"channel_last_used.{bot_id_for_tracking}"] = datetime.now(timezone.utc).isoformat()
-        
-        db.collection("shops").document(shop_doc_id).update(updates)
-    except Exception as e:
-        pass  # Silent — stats tracking should never block the pipeline
+    # ── Track AI tokens + channel usage (background) ──
+    asyncio.create_task(_track_analytics(shop_doc_id, acc_id, total_tokens))
     
-    # Release per-user sequential lock
-    await _release_user_lock(user_id)
+    # Lock already released above — user can send next message immediately
     
     print(f"⏱️  [TOTAL] Pipeline complete: {(time.time()-t_start):.2f}s | reply: '{reply_text[:50]}...'", flush=True)
 
@@ -511,3 +472,16 @@ async def _handle_admin_feedback(data):
 async def _handle_refresh(acc_id, shop_doc_id):
     """Handle /refresh command — clear ALL caches via central manager."""
     await invalidate_shop_caches(shop_doc_id, acc_id=acc_id)
+
+
+async def _track_analytics(shop_doc_id, acc_id, total_tokens):
+    """Background task: update Firestore analytics (never blocks main pipeline)."""
+    import google.cloud.firestore as firestore_module
+    try:
+        updates = {"ai_tokens_used": firestore_module.Increment(total_tokens)}
+        if acc_id:
+            updates[f"channel_msg_count.{acc_id}"] = firestore_module.Increment(1)
+            updates[f"channel_last_used.{acc_id}"] = datetime.now(timezone.utc).isoformat()
+        db.collection("shops").document(shop_doc_id).update(updates)
+    except Exception:
+        pass  # Silent — stats should never block the pipeline
