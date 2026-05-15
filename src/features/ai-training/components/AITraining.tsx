@@ -15,7 +15,6 @@ import {
   ShopPoliciesCard,
   BehavioralConstraintsCard,
   FAQsCard,
-  StandardResponsesCard,
   ReplyGuidelinesCard,
   FewShotExamplesCard,
   ShopSettingsData
@@ -203,7 +202,6 @@ export default function AITraining({ initialConfig, shopId, currentShop, onUnsyn
         <ShopPoliciesCard {...commonProps} />
         <BehavioralConstraintsCard {...commonProps} />
         <FAQsCard {...commonProps} />
-        <StandardResponsesCard {...commonProps} />
         <ReplyGuidelinesCard {...commonProps} />
         <FewShotExamplesCard {...commonProps} />
       </div>
