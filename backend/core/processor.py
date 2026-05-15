@@ -13,7 +13,7 @@ from utils import (
     BASE_MODEL_NAME, FAST_MODEL_NAME,
     get_sendpulse_token,
 )
-from agents.automation_agent import run_automation_agent
+from agents import run_automation_agent  # kept for backward compat, unified agent replaces it
 
 from .profile_manager import get_user_profile, save_profile, segment_customer, expire_order_state
 from .data_extractor import extract_text_deeply, extract_bot_id, extract_user_id, extract_attachments, download_media_parts
@@ -264,60 +264,35 @@ async def process_core_logic(data):
     print(f"⏱️  [3] Config+Typing+History: {(time.time()-t3):.2f}s", flush=True)
     t4 = time.time()
 
-    # ── 8. Fast Greeting Router (Keyword-first, 0ms) ──
-    # ⚡ SKIP STRATEGY: Use keyword classifier first. Only call AI router if truly ambiguous.
+    # ── 8. Fast Keywords + Hardcoded Greeting (0ms) ──
     kw_intent, _ = fast_intent_classify(user_msg, order_state)
     
-    # Greeting router skip rules:
-    # - Message > 80 chars → NOT a greeting
-    # - Media/attachments present → NOT a greeting
-    # - Keyword detected ANY non-greeting intent → NOT a greeting
-    is_likely_greeting = (
-        len(user_msg) <= 80 
-        and not media_parts 
-        and not attachments
-        and (not kw_intent or kw_intent == "GREETING")
-    )
-    
-    if is_likely_greeting:
-        # Only call AI greeting router if keyword couldn't decide
-        if kw_intent == "GREETING":
-            # Very likely greeting → use hardcoded response (0ms, no AI call)
-            print(f"⚡ Greeting Router: KEYWORD skip (kw={kw_intent}) — 0ms", flush=True)
+    # ⚡ 0ms GREETING: Exact match only → hardcoded reply, no AI at all
+    if kw_intent == "GREETING" and len(user_msg) <= 30 and not media_parts and not attachments:
+        # Use session-based check: only greet on FIRST message
+        if prof["dynamics"].get("message_count", 0) <= 1:
+            print(f"⚡ Greeting: KEYWORD hardcoded 0ms (msg_count={prof['dynamics'].get('message_count',0)})", flush=True)
             from .greeting_router import _hardcoded_greeting_reply
             reply_text = _hardcoded_greeting_reply(lang)
             await add_to_history(shop_doc_id, conv_id, "AI", reply_text, max_len=10)
             await send_sendpulse_messages(acc_id, user_id, {"intent": "GREETING"}, reply_text, token)
             await increment_shop_tokens(acc_id, 0)
-            print(f"⏱️  [TOTAL] Pipeline: {(time.time()-t_start):.2f}s (keyword greeting)", flush=True)
+            print(f"⏱️  [TOTAL] Pipeline: {(time.time()-t_start):.2f}s (hardcoded greeting)", flush=True)
             return
         else:
-            # Ambiguous short message — call AI router (last resort)
-            greeting_context = chat_history
-            if re_engage_note:
-                greeting_context = f"[Context for AI]\n{re_engage_note}\n\n{chat_history}"
-            t_greet = time.time()
-            handled = await run_greeting_router(user_msg, greeting_context, ai_config, shop_doc_id, conv_id, acc_id, user_id, token, lang)
-            print(f"⏱️  [4] Greeting Router AI call: {(time.time()-t_greet):.2f}s", flush=True)
-            if handled:
-                print(f"⏱️  [TOTAL] Pipeline: {(time.time()-t_start):.2f}s (greeting)", flush=True)
-                return
-    else:
-        print(f"🚦 Greeting Router: SKIP (msg_len={len(user_msg)}, media={bool(media_parts)}, kw={kw_intent})", flush=True)
-
+            # Returning customer says "hi" → skip greeting, go straight to intent
+            print(f"⚡ Greeting SKIP: returning customer (msg_count={prof['dynamics'].get('message_count',0)})", flush=True)
+    
     chat_history = await get_history(shop_doc_id, conv_id)
-    print(f"⏱️  [4] Greeting Router done: {(time.time()-t4):.2f}s", flush=True)
+    print(f"⏱️  [4] Greeting check done: {(time.time()-t4):.2f}s", flush=True)
     t5 = time.time()
 
-    # ── 9. Smart Intent Classify + Research ──
-    fast_intent, skip_automation = fast_intent_classify(user_msg, order_state)
-    
-    # ⚡ EMBEDDING SKIP: Intents that don't need product search
+    # ── 9. Embedding Research (only if needed) ──
     SKIP_EMBEDDING_INTENTS = {"GREETING", "COMPLAINT_OR_HUMAN", "OUT_OF_DOMAIN", 
                                "DELIVERY", "PAYMENT", "POLICY_FAQ", "SLIP_UPLOAD"}
     
-    if fast_intent in SKIP_EMBEDDING_INTENTS:
-        print(f"⚡ Embedding SKIP: intent={fast_intent} — 0ms (no product search needed)", flush=True)
+    if kw_intent in SKIP_EMBEDDING_INTENTS:
+        print(f"⚡ Embedding SKIP: intent={kw_intent} — 0ms", flush=True)
         tool_info, msg_emb = "No items needed", None
     else:
         t_research = time.time()
@@ -325,80 +300,45 @@ async def process_core_logic(data):
         tool_info, msg_emb = research_result
         print(f"⏱️  Embedding Research: {(time.time()-t_research):.2f}s", flush=True)
     
-    # ⚡ SKIP Automation Agent entirely when keyword confidence is high
-    # Only call Automation Agent for: COMPLAINT, HUMAN_HANDOVER, unclear intents, active order flows
-    automation_data = {
-        "intent": fast_intent or "PRODUCT_INQUIRY",
-        "is_complex": False,
-        "reply": "",
-        "extracted_preferences": {},
-        "behavioral_tags": [],
-        "prompt_tokens": 0,
-        "candidate_tokens": 0,
-    }
+    # ── 10. UNIFIED AGENT (ONE AI call replaces Greeting Router + Automation + Product/Order/Media) ──
+    from agents.unified_agent import run_unified_agent
     
-    NEED_AUTOMATION = (
-        not skip_automation                          # Keyword says "need AI"
-        or fast_intent in ("COMPLAINT_OR_HUMAN",)   # Always needs empathy
-        or order_state not in ("NONE",)              # Active order flow → needs care
-        or not fast_intent                           # Unclear intent
+    print(f"⚡ Unified Agent: ONE AI call (kw={kw_intent}, state={order_state})...", flush=True)
+    unified_result = await run_unified_agent(
+        user_msg=user_msg,
+        chat_history=chat_history,
+        profile=prof,
+        ai_config=ai_config,
+        tool_info=tool_info,
+        order_state=order_state,
+        media_parts=media_parts,
+        photo_context=photo_context,
+        shop_doc_id=shop_doc_id,
+        delivery_info=delivery_info,
+        payment_info=payment_info,
+        currency=currency,
     )
     
-    if NEED_AUTOMATION:
-        print(f"⚡ Automation Agent: Calling (skip_auto={skip_automation}, intent={fast_intent}, state={order_state})...", flush=True)
-        try:
-            auto_result = await asyncio.wait_for(
-                run_automation_agent(user_msg, media_parts, chat_history, prof, ai_config, shop_info_data, BASE_MODEL_NAME, shop_doc_id=shop_doc_id, tool_info=tool_info),
-                timeout=5.0
-            )
-            automation_data.update({
-                "intent": auto_result.get("intent", fast_intent),
-                "is_complex": auto_result.get("is_complex", False),
-                "reply": auto_result.get("reply", ""),
-                "extracted_preferences": auto_result.get("extracted_preferences", {}),
-                "behavioral_tags": auto_result.get("behavioral_tags", []),
-                "prompt_tokens": auto_result.get("prompt_tokens", 0),
-                "candidate_tokens": auto_result.get("candidate_tokens", 0),
-            })
-            print(f"✅ Automation Agent returned: intent={automation_data['intent']}", flush=True)
-        except asyncio.TimeoutError:
-            print(f"⏰ Automation Agent timed out — using keyword intent", flush=True)
-        except Exception as e:
-            print(f"⚠️ Automation Agent error: {e}", flush=True)
-    else:
-        print(f"⚡ SMART SKIP: fast_intent={fast_intent} (skip_auto={skip_automation}) — 0ms saved", flush=True)
-
-    intent_type = automation_data.get("intent", "PRODUCT_INQUIRY")
-    is_complex = automation_data.get("is_complex", False)
-    reply_text = automation_data.get("reply", "")
-    print(f"⏱️  [5] Intent+Research+Automation: {(time.time()-t5):.2f}s | intent={intent_type}", flush=True)
+    intent_type = unified_result.get("intent") or kw_intent or "PRODUCT_INQUIRY"
+    reply_text = unified_result.get("reply", "")
+    is_complex = unified_result.get("is_complex", False)
+    extracted = unified_result.get("extracted", {})
+    total_tokens = unified_result.get("prompt_tokens", 0) + unified_result.get("candidate_tokens", 0)
+    
+    print(f"⏱️  [5] Unified Agent done: {(time.time()-t5):.2f}s | intent={intent_type} | tokens={total_tokens}", flush=True)
     t6 = time.time()
 
-    # ── 10. Semantic Cache ──
+    # ── 11. Semantic Cache ──
     cached_reply = await check_semantic_cache(shop_doc_id, user_msg, msg_emb, intent_type, order_state, acc_id)
 
-    # ── Preference Extraction (from keyword classifier tags) ──
-    extracted_prefs = automation_data.get("extracted_preferences", {})
-    behavioral_tags = automation_data.get("behavioral_tags", [])
-    if extracted_prefs or behavioral_tags:
-        # Update structured preferences in profile
+    # ── 12. Preference Extraction ──
+    if extracted:
         from .profile_manager import update_customer_preferences
-        if extracted_prefs:
-            update_customer_preferences(prof, extracted_prefs)
-        
-        current_prefs = prof["ai_insights"].get("preferences", {})
-        if isinstance(current_prefs, dict) and isinstance(extracted_prefs, dict):
-            current_prefs.update(extracted_prefs)
-            prof["ai_insights"]["preferences"] = current_prefs
-        
-        current_tags = prof["ai_insights"].get("tags", [])
-        if isinstance(current_tags, list) and isinstance(behavioral_tags, list):
-            for tag in behavioral_tags:
-                if tag not in current_tags:
-                    current_tags.append(tag)
-            prof["ai_insights"]["tags"] = current_tags
-            
-        await save_profile(shop_doc_id, user_id, prof)
+        prefs = {k: v for k, v in extracted.items() if k not in ("buttons", "images", "items")}
+        if prefs:
+            update_customer_preferences(prof, prefs)
+            prof["ai_insights"]["preferences"] = {**prof["ai_insights"].get("preferences", {}), **prefs}
+            await save_profile(shop_doc_id, user_id, prof)
     
     # Build memory context for AI prompt
     from .profile_manager import build_memory_context
@@ -407,71 +347,46 @@ async def process_core_logic(data):
         # Prepend memory context to user message so AI has context
         user_msg = f"[CUSTOMER MEMORY]\n{memory_ctx}\n\n{user_msg}"
 
-    # ── 12. Escalation ──
+    # ── 13. Escalation ──
     if is_complex or intent_type == "COMPLAINT_OR_HUMAN":
-        # Use AI's empathetic reply if available, otherwise fallback to hardcoded
-        ai_escalation_reply = automation_data.get("reply", "").strip()
+        ai_escalation_reply = reply_text
         reply_text = await handle_escalation(
             shop_doc_id, acc_id, conv_id, user_id, token, agent_id, intent_type, lang,
             ai_reply=ai_escalation_reply
         )
         await add_to_history(shop_doc_id, conv_id, "AI", reply_text, max_len=10)
-        await send_sendpulse_messages(acc_id, user_id, {}, reply_text, token)
+        await send_sendpulse_messages(acc_id, user_id, extracted, reply_text, token)
         return
 
-    # ── 13. Agent Routing ──
-    should_bypass = intent_type in ["ORDER", "START_ORDER", "ORDER_CHECKOUT", "COMPLAINT_OR_HUMAN", "SLIP_UPLOAD"]
-
-    if cached_reply and order_state == "NONE":
-        # Only use cache when NOT in active order flow
-        reply_text, is_complex = cached_reply, False
-        final_data = {"reply": reply_text, "is_complex": False, "intent": "CACHED_FAQ"}
-        total_tokens = 0
-    elif cached_reply and order_state != "NONE":
-        # In order flow — skip cache, let agent handle it
-        print(f"⚠️ Cache skipped — order is active (state={order_state})", flush=True)
-        cached_reply = None  # Reset so agent runs below
-    elif reply_text and not is_complex and intent_type not in ["PRODUCT_INQUIRY", "ORDER", "START_ORDER", "ORDER_CHECKOUT", "SLIP_UPLOAD"] and not media_parts:
-        final_data = {
-            "reply": reply_text, "is_complex": False, "intent": intent_type,
-            "prompt_tokens": automation_data.get("prompt_tokens", 0),
-            "candidate_tokens": automation_data.get("candidate_tokens", 0),
-        }
-        total_tokens = final_data["prompt_tokens"] + final_data["candidate_tokens"]
-    else:
-        t_agent = time.time()
-        final_data, total_tokens = await route_to_agent(
-            order_state, prof, user_msg, ai_config, chat_history,
-            media_parts, tool_info, currency, policies,
-            delivery_info, payment_info, attachments,
-            should_bypass, shop_doc_id, user_id, lang,
-            intent_type, automation_reply=reply_text,
-            photo_context=photo_context
-        )
-        reply_text = final_data.get("reply", "") or ""
-        is_complex = final_data.get("is_complex", False)
-        
-        # ⚡ EMPTY REPLY FALLBACK: If AI returned no reply, generate safe default
-        if not reply_text.strip():
-            if lang.lower() in ["myanmar", "burmese", "mm"]:
-                if intent_type in ("PRODUCT_INQUIRY",):
-                    reply_text = "ရှာမတွေ့ပါဘူးရှင့်။ နာမည်အပြည့်အစုံလေး ပြောပေးပါဦးနော်။"
-                elif intent_type == "DELIVERY":
-                    reply_text = "ပို့ဆောင်ရေးအကြောင်း ပြောပြပေးပါမယ်ရှင့်။ ဘယ်မြို့လဲပြောပေးပါဦး။"
-                elif intent_type == "PAYMENT":
-                    reply_text = "ငွေပေးချေနည်းတွေ ရှင်းပြပေးပါမယ်ရှင့်။"
-                else:
-                    reply_text = "ဘာကူညီပေးရမလဲရှင့်။"
+    # ── 14. Use Unified Agent Reply Directly (Skip separate agent routing) ──
+    # The unified agent already generated the final reply. No need for product/order/media agent.
+    final_data = {
+        "reply": reply_text,
+        "is_complex": is_complex,
+        "intent": intent_type,
+        "extracted": extracted,
+        "prompt_tokens": unified_result.get("prompt_tokens", 0),
+        "candidate_tokens": unified_result.get("candidate_tokens", 0),
+    }
+    
+    # ⚡ EMPTY REPLY FALLBACK: If AI returned no reply, generate safe default
+    if not reply_text.strip():
+        if lang.lower() in ["myanmar", "burmese", "mm"]:
+            if intent_type in ("PRODUCT_INQUIRY",):
+                reply_text = "ရှာမတွေ့ပါဘူးရှင့်။ နာမည်အပြည့်အစုံလေး ပြောပေးပါဦးနော်။"
+            elif intent_type == "DELIVERY":
+                reply_text = "ပို့ဆောင်ရေးအကြောင်း ပြောပြပေးပါမယ်ရှင့်။ ဘယ်မြို့လဲပြောပေးပါဦး။"
             else:
-                if intent_type in ("PRODUCT_INQUIRY",):
-                    reply_text = "I couldn't find that item. Could you share the exact product name?"
-                elif intent_type == "DELIVERY":
-                    reply_text = "Let me share our delivery info. Which city are you in?"
-                elif intent_type == "PAYMENT":
-                    reply_text = "Here are our payment options. Let me know if you need details."
-                else:
-                    reply_text = "How can I help you today?"
-            print(f"⚠️ Empty AI reply → using fallback for intent={intent_type}", flush=True)
+                reply_text = "ဘာကူညီပေးရမလဲရှင့်။"
+        else:
+            if intent_type in ("PRODUCT_INQUIRY",):
+                reply_text = "I couldn't find that. Could you share the exact product name?"
+            elif intent_type == "DELIVERY":
+                reply_text = "Let me share our delivery info. Which city are you in?"
+            else:
+                reply_text = "How can I help you today?"
+        final_data["reply"] = reply_text
+        print(f"⚠️ Empty AI reply → using fallback for intent={intent_type}", flush=True)
         print(f"⏱️  [6] Agent Routing (product/order/media): {(time.time()-t_agent):.2f}s", flush=True)
 
     # ── 14. Response & Save ──
