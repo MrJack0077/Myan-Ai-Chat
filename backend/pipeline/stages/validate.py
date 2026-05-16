@@ -30,10 +30,11 @@ async def validate_request(acc_id: str, user_id: str, data: dict) -> tuple | Non
     # ── Load shop ──
     shop = await get_shop_data(acc_id)
     if not shop:
-        print(f"❌ Shop not found: {acc_id}", flush=True)
+        print(f"❌ Shop not found for bot_id: '{acc_id}'. Tried sendpulseBotIds + acc_id + full scan.", flush=True)
         await _release_lock(user_id)
         return None
     shop_doc_id = shop["shop_doc_id"]
+    print(f"✅ Shop found: {shop.get('name', shop_doc_id)} (id={shop_doc_id})", flush=True)
 
     # ── Rate limit check ──
     if not await check_rate_limit(shop_doc_id):
