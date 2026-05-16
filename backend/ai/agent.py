@@ -84,8 +84,20 @@ async def run_unified_agent(
     pmt_str = ", ".join(p.get('type', '') for p in (payment_info or [])) or "Cash"
 
     extra_ctx = [
-        f"[CUSTOMER] Name={ident.get('name','?')} | State={order_state} | Phone={ident.get('phone','?')}",
-        f"[ORDER] Items={', '.join(profile.get('current_order',{}).get('items',[]))} | Total={profile.get('current_order',{}).get('total_price',0)} {currency}",
+        f"[CUSTOMER & ORDER CONTEXT]",
+        f"Name={ident.get('name','?')} | Phone={ident.get('phone','?')} | Address={ident.get('address','?')}",
+        f"Order State={order_state} | Items={', '.join(profile.get('current_order',{}).get('items',[]))} | Total={profile.get('current_order',{}).get('total_price',0)} {currency}",
+        f"Segment={profile.get('identification',{}).get('segment','new')} | Message #{profile.get('dynamics',{}).get('message_count',0)}",
+    ]
+    
+    # ⚡ ORDER STATE AWARENESS — critical for keeping context
+    if order_state == "COLLECTING":
+        extra_ctx.append(f"⚡ You are COLLECTING order. Ask ONE missing field at a time (name/phone/address/payment).")
+        extra_ctx.append(f"⚡ DO NOT greet again. Stay in order flow. If customer changes topic → keep order context.")
+    elif order_state == "CONFIRMING":
+        extra_ctx.append(f"⚡ Customer CONFIRMING order. Show summary, ask for final OK.")
+    
+    extra_ctx += [
         f"[PAYMENT METHODS] {pmt_str}, COD",
         f"[CURRENCY] {currency}",
         f"[DATABASE INFO]\n{tool_info if tool_info else 'No products in database.'}",
