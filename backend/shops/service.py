@@ -28,7 +28,14 @@ async def get_shop_data(acc_id: str) -> dict | None:
     try:
         import asyncio
         shops_ref = db.collection("shops")
-        all_docs = list(await asyncio.to_thread(shops_ref.stream))
+        
+        try:
+            all_docs = list(await asyncio.to_thread(shops_ref.stream))
+        except Exception as stream_err:
+            print(f"🔥 Shop stream error: {stream_err}", flush=True)
+            return None
+
+        print(f"🔍 Scanning {len(all_docs)} shops for bot_id: {acc_id[:20]}...", flush=True)
 
         for doc in all_docs:
             data = doc.to_dict() if callable(doc.to_dict) else {}
@@ -37,6 +44,7 @@ async def get_shop_data(acc_id: str) -> dict | None:
             bot_ids = data.get("sendpulseBotIds", [])
             if acc_id in bot_ids:
                 data["shop_doc_id"] = doc.id
+                print(f"✅ Found by sendpulseBotIds: {data.get('name', doc.id)}", flush=True)
                 if r:
                     try:
                         import json
@@ -48,6 +56,7 @@ async def get_shop_data(acc_id: str) -> dict | None:
             # Match by acc_id field
             if data.get("acc_id") == acc_id:
                 data["shop_doc_id"] = doc.id
+                print(f"✅ Found by acc_id: {data.get('name', doc.id)}", flush=True)
                 if r:
                     try:
                         import json
@@ -55,6 +64,13 @@ async def get_shop_data(acc_id: str) -> dict | None:
                     except Exception:
                         pass
                 return data
+
+        # Not found — show available bot_ids for debugging
+        all_bot_ids = []
+        for doc in all_docs:
+            data = doc.to_dict() if callable(doc.to_dict) else {}
+            all_bot_ids.extend(data.get("sendpulseBotIds", []))
+        print(f"❌ Shop not found for bot_id: '{acc_id[:20]}...'. Available bot_ids: {all_bot_ids[:5]}", flush=True)
     except Exception as e:
         print(f"🔥 Shop lookup error: {e}", flush=True)
 
