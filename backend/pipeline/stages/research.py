@@ -50,36 +50,44 @@ async def _hybrid_search(query: str, shop_doc_id: str, embedding: list[float]) -
         return ""
 
     import asyncio
-    products_ref = db.collection("shops").document(shop_doc_id).collection("products")
+    items_ref = db.collection("shops").document(shop_doc_id).collection("items")
 
     # Get all products
-    docs = await asyncio.to_thread(products_ref.stream)
+    docs = await asyncio.to_thread(items_ref.stream)
     products = []
     for d in docs:
         data = d.to_dict() if callable(d.to_dict) else {}
         data["id"] = d.id
         products.append(data)
 
+    print(f"🔍 Searched {len(products)} items for: {query[:60]}...", flush=True)
+
     if not products:
-        return ""
+        return "No items in database."
 
     # Score by keyword match + embedding similarity
     query_lower = query.lower()
     scored = []
     for prod in products:
-        name = prod.get("name", "")
+        name = str(prod.get("name", ""))
+        keywords = str(prod.get("ai_keywords", ""))
         score = 0
-        # Keyword scoring
+        # Keyword scoring (product name)
         if name.lower() in query_lower or query_lower in name.lower():
-            score += 3
+            score += 5
         for word in query_lower.split():
             if word in name.lower():
-                score += 1
+                score += 2
+        # Keyword scoring (ai_keywords field)
+        if keywords:
+            for word in query_lower.split():
+                if word in keywords.lower():
+                    score += 2
         # Cosine similarity (if embedding available)
         if embedding and prod.get("embedding"):
             try:
                 sim = _cosine_sim(embedding, prod["embedding"])
-                score += sim * 2
+                score += sim * 3
             except Exception:
                 pass
         if score > 0:
@@ -87,16 +95,17 @@ async def _hybrid_search(query: str, shop_doc_id: str, embedding: list[float]) -
 
     scored.sort(key=lambda x: x[0], reverse=True)
 
-    # Build results string (top 3)
+    # Build results string (top 10)
     lines = []
-    for _, prod in scored[:3]:
+    for _, prod in scored[:10]:
         name = prod.get("name", "Unknown")
         price = prod.get("price", "N/A")
-        stock = prod.get("stock", 0)
-        color = prod.get("color", "")
-        image = prod.get("image", "")
-        lines.append(f"- {name} | {price} MMK | Stock: {stock} | Color: {color} | Image: {image}")
+        status = prod.get("status", "available")
+        description = str(prod.get("description", ""))[:80]
+        kw = str(prod.get("ai_keywords", ""))[:60]
+        lines.append(f"- {name} | {price} | Status: {status} | Keywords: {kw} | Desc: {description}")
 
+    print(f"📊 Found {len(scored)} matches (top {len(lines)} shown)", flush=True)
     return "\n".join(lines) if lines else ""
 
 
@@ -122,8 +131,8 @@ async def _keyword_only_search(query: str, shop_doc_id: str) -> str:
         return ""
 
     import asyncio
-    products_ref = db.collection("shops").document(shop_doc_id).collection("products")
-    docs = await asyncio.to_thread(products_ref.stream)
+    items_ref = db.collection("shops").document(shop_doc_id).collection("items")
+    docs = await asyncio.to_thread(items_ref.stream)
     products = []
     for d in docs:
         data = d.to_dict() if callable(d.to_dict) else {}
@@ -136,13 +145,18 @@ async def _keyword_only_search(query: str, shop_doc_id: str) -> str:
     query_lower = query.lower()
     scored = []
     for prod in products:
-        name = prod.get("name", "")
+        name = str(prod.get("name", ""))
+        keywords = str(prod.get("ai_keywords", ""))
         score = 0
         if name.lower() in query_lower or query_lower in name.lower():
             score += 5
         for word in query_lower.split():
             if word in name.lower():
-                score += 1
+                score += 2
+        if keywords:
+            for word in query_lower.split():
+                if word in keywords.lower():
+                    score += 2
         if score > 0:
             scored.append((score, prod))
 
@@ -153,8 +167,8 @@ async def _keyword_only_search(query: str, shop_doc_id: str) -> str:
     for _, prod in scored[:10]:
         name = prod.get("name", "Unknown")
         price = prod.get("price", "N/A")
-        stock = prod.get("stock", 0)
-        lines.append(f"- {name} | {price} MMK | Stock: {stock}")
+        status = prod.get("status", "available")
+        lines.append(f"- {name} | {price} | Status: {status}")
 
     return "\n".join(lines) if lines else ""
 
