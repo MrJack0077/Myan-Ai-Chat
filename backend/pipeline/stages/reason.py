@@ -50,11 +50,41 @@ async def generate_ai_reply(
     intent = result.get("intent", "PRODUCT_INQUIRY")
     extracted = result.get("extracted", {})
 
-    # ⚡ Auto-extract items from AI reply if not already done
-    if not extracted.get("items") and order_state in ("COLLECTING",):
-        _auto_extract_items(reply_text, tool_info, profile)
+    # ⚡ Phase 1: Professional Order Data Extraction — keyword-based backup
+    if not extracted or not any([extracted.get("name"), extracted.get("phone"), extracted.get("items")]):
+        from orders.extractor import extract_order_data
+        kw_data = extract_order_data(user_msg)
+        if kw_data.get("name"):
+            extracted["name"] = kw_data["name"]
+            profile.setdefault("identification", {})["name"] = kw_data["name"]
+        if kw_data.get("phone"):
+            extracted["phone"] = kw_data["phone"]
+            profile.setdefault("identification", {})["phone"] = kw_data["phone"]
+        if kw_data.get("address"):
+            extracted["address"] = kw_data["address"]
+            profile.setdefault("identification", {})["address"] = kw_data["address"]
+        if kw_data.get("items"):
+            extracted["items"] = kw_data["items"]
+            existing = profile.setdefault("current_order", {}).setdefault("items", [])
+            for item in kw_data["items"]:
+                if item not in existing:
+                    existing.append(item)
+        if kw_data.get("payment_method"):
+            extracted["payment_method"] = kw_data["payment_method"]
+            profile.setdefault("current_order", {})["payment_method"] = kw_data["payment_method"]
+        
+        if any([kw_data.get("name"), kw_data.get("phone"), kw_data.get("items")]):
+            import asyncio as _aio
+            from customers.profile import save_profile as _sp
+            _aio.create_task(_sp(shop_doc_id, user_id, profile))
+            print(f"🔑 Keyword extraction saved: {kw_data}", flush=True)
+
+    # ⚡ Auto-extract items from database if not already present
+    if not extracted.get("items") or (order_state in ("COLLECTING",) and not profile.get("current_order", {}).get("items")):
+        _auto_extract_items(user_msg, tool_info, profile)
         if profile.get("current_order", {}).get("items"):
             result.setdefault("extracted", {})["items"] = profile["current_order"]["items"]
+            print(f"📦 Auto-items: {profile['current_order']['items']}", flush=True)
 
     # Handle START_ORDER: clear old order items
     if intent == "START_ORDER":
