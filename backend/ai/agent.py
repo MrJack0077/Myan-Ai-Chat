@@ -200,15 +200,14 @@ async def run_unified_agent(
                 genai_client.aio.models.generate_content(
                     model=BASE_MODEL_NAME, contents=contents, config=gen_config,
                 ),
-                timeout=8.0,
+                timeout=15.0,  # ⚡ 15s timeout (was 8s — VPS latency needs more)
             )
             break  # Success — exit retry loop
         except asyncio.TimeoutError:
             if attempt == 0:
-                print(f"⚠️ AI timeout, retrying... (attempt {attempt+1}/2)", flush=True)
+                print(f"⚠️ AI timeout (15s), retrying... (attempt {attempt+1}/2)", flush=True)
                 await asyncio.sleep(0.5)
                 continue
-            # Both attempts timed out — return fallback
             print(f"❌ AI timed out after 2 attempts", flush=True)
             return _safe_fallback()
         except Exception as e:
