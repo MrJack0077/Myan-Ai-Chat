@@ -47,45 +47,59 @@ def extract_payload_data(data: dict) -> Optional[tuple]:
 def _extract_text_deeply(data: dict) -> str:
     """Extract message text from various payload shapes (SendPulse formats)."""
     # Direct text
-    if "text" in data and data["text"]:
+    if "text" in data and data["text"] and isinstance(data["text"], str):
         return str(data["text"]).strip()
 
-    # Nested data.message
-    if isinstance(data.get("data"), dict):
-        return _extract_text_deeply(data["data"])
+    # Recursively search nested dicts for text field
+    for key, value in data.items():
+        if isinstance(value, dict):
+            # Check for channel_data.message.text pattern (SendPulse nested)
+            result = _extract_text_deeply(value)
+            if result:
+                return result
+        elif isinstance(value, list) and value:
+            for item in value:
+                if isinstance(item, dict):
+                    result = _extract_text_deeply(item)
+                    if result:
+                        return result
 
     # Nested message.text
     if isinstance(data.get("message"), dict):
         return str(data["message"].get("text", "")).strip()
 
-    # Raw payload text
-    if isinstance(data.get("raw"), dict):
-        raw_text = _extract_text_deeply(data["raw"])
-        if raw_text:
-            return raw_text
-
     return ""
 
 
 def _extract_bot_id(data: dict) -> str:
-    """Extract bot/account ID from payload."""
+    """Extract bot/account ID from payload (recursively)."""
     for key in ("bot_id", "acc_id", "account_id"):
         if data.get(key):
             return str(data[key])
-    if isinstance(data.get("data"), dict):
-        return _extract_bot_id(data["data"])
+    if isinstance(data.get("bot"), dict):
+        return str(data["bot"].get("id", ""))
+    # Recursively search nested dicts
+    for key, value in data.items():
+        if isinstance(value, dict):
+            result = _extract_bot_id(value)
+            if result:
+                return result
     return ""
 
 
 def _extract_user_id(data: dict) -> str:
-    """Extract user/contact ID from payload."""
+    """Extract user/contact ID from payload (recursively)."""
     for key in ("user_id", "contact_id", "conversation_id"):
         if data.get(key):
             return str(data[key])
     if isinstance(data.get("contact"), dict):
         return str(data["contact"].get("id", ""))
-    if isinstance(data.get("data"), dict):
-        return _extract_user_id(data["data"])
+    # Recursively search nested dicts
+    for key, value in data.items():
+        if isinstance(value, dict):
+            result = _extract_user_id(value)
+            if result:
+                return result
     return ""
 
 
