@@ -43,13 +43,22 @@ async def get_shop_data(acc_id: str) -> dict | None:
             # DEBUG: Print all keys of each shop
             print(f"🛒 Shop {doc.id[:20]}... keys: {list(data.keys())[:20]}", flush=True)
 
-            # Match by sendpulseBotIds array — try multiple field name variants
-            bot_ids = (data.get("sendpulseBotIds") or data.get("sendpulseBotIDs")
-                       or data.get("sendpulse_bot_ids") or data.get("botIds")
-                       or data.get("bot_ids") or [])
+            # Match by sendpulseBots array (array of objects like {id: 'bot_id', channel: 'telegram'})
+            # Also try sendpulseBotIds (array of strings) and single bot_id string
+            bot_ids_raw = (data.get("sendpulseBots") or data.get("sendpulseBotIds")
+                          or data.get("sendpulseBotIDs") or data.get("sendpulse_bot_ids")
+                          or data.get("botIds") or data.get("bot_ids") or [])
             
-            if isinstance(bot_ids, str):
-                bot_ids = [bot_ids]  # Single bot ID as string
+            # Normalize: extract 'id' from objects, handle strings
+            bot_ids = []
+            if isinstance(bot_ids_raw, list):
+                for item in bot_ids_raw:
+                    if isinstance(item, dict) and item.get("id"):
+                        bot_ids.append(item["id"])
+                    elif isinstance(item, str):
+                        bot_ids.append(item)
+            elif isinstance(bot_ids_raw, str):
+                bot_ids = [bot_ids_raw]
             if acc_id in bot_ids:
                 data["shop_doc_id"] = doc.id
                 print(f"✅ Found by sendpulseBotIds: {data.get('name', doc.id)}", flush=True)
