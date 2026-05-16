@@ -105,12 +105,15 @@ async def process_core_logic(data: dict) -> None:
         # Detect channel from shop's sendpulseBots
         detected_channel = ""
         bots = shop.get("sendpulseBots", [])
+        print(f"📡 sendpulseBots: {json.dumps(bots, default=str)[:200]}", flush=True)
         for bot in bots:
             if isinstance(bot, dict) and bot.get("id") == acc_id:
                 detected_channel = bot.get("channel", "")
                 break
         if detected_channel:
             print(f"📡 Channel detected: {detected_channel}", flush=True)
+        else:
+            print(f"⚠️ Channel NOT found for acc_id={acc_id[:20]}... in sendpulseBots", flush=True)
         
         await send_reply(
             unified_result=unified_result,
