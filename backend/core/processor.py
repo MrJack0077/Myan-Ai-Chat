@@ -241,9 +241,8 @@ async def process_core_logic(data):
     print(f"⏱️  [3] Config+Typing+History: {(time.time()-t3):.2f}s", flush=True)
     t4 = time.time()
 
-    # ── 8. Keyword Intent Classify (0ms) ──
+    # ── 8. Keyword Intent Classify (0ms) — for embedding skip only, NOT for intent decision ──
     kw_intent, _ = fast_intent_classify(user_msg, order_state)
-    # ⚡ NO Greeting Router — all messages go to Unified Agent
     t5 = time.time()
 
     # ── 9. Embedding Research (only if needed) ──
@@ -259,10 +258,10 @@ async def process_core_logic(data):
         tool_info, msg_emb = research_result
         print(f"⏱️  Embedding Research: {(time.time()-t_research):.2f}s", flush=True)
     
-    # ── 10. UNIFIED AGENT (ONE AI call — main reply) ──
+    # ── 10. UNIFIED AGENT — AI decides intent, reply, extraction (NO keyword override) ──
     from agents.unified_agent import run_unified_agent
     
-    print(f"⚡ Unified Agent: ONE AI call (kw={kw_intent}, state={order_state})...", flush=True)
+    print(f"⚡ Unified Agent: ONE AI call (state={order_state})...", flush=True)
     unified_result = await run_unified_agent(
         user_msg=user_msg,
         chat_history=chat_history,
@@ -278,25 +277,15 @@ async def process_core_logic(data):
         currency=currency,
     )
     
-    intent_type = unified_result.get("intent") or kw_intent or "PRODUCT_INQUIRY"
+    # AI decides EVERYTHING — no keyword override
+    intent_type = unified_result.get("intent") or "PRODUCT_INQUIRY"
     reply_text = unified_result.get("reply", "")
-    # ⚡ Safety: ensure reply is string (AI sometimes returns dict)
     if isinstance(reply_text, dict):
         reply_text = reply_text.get("text") or reply_text.get("reply") or ""
     reply_text = str(reply_text) if reply_text else ""
     is_complex = unified_result.get("is_complex", False)
     extracted = unified_result.get("extracted", {})
     total_tokens = unified_result.get("prompt_tokens", 0) + unified_result.get("candidate_tokens", 0)
-    
-    # ⚡ Intent override: keyword classifier is more reliable for basic intents
-    # AI tends to misclassify "hello" as PRODUCT_INQUIRY
-    if kw_intent and intent_type != kw_intent:
-        if kw_intent in ("GREETING",) and not reply_text:
-            # Keyword says greeting but AI didn't give reply → use hardcoded
-            from .greeting_router import _hardcoded_greeting_reply
-            reply_text = _hardcoded_greeting_reply(lang)
-            intent_type = "GREETING"
-            print(f"⚡ Intent fix: AI={intent_type} → kw={kw_intent}", flush=True)
     
     # ⚡ START_ORDER: clear old order items (customer wants something new)
     if intent_type == "START_ORDER":
@@ -416,10 +405,14 @@ async def process_core_logic(data):
     print(f"🔍 ORDER DEBUG: intent={order_intent}, is_complex={is_complex}, order_state={order_state}", flush=True)
     print(f"🔍 ORDER DEBUG: prof.identification={prof.get('identification', {})}", flush=True)
     print(f"🔍 ORDER DEBUG: prof.current_order={prof.get('current_order', {})}", flush=True)
+    print(f"🔍 ORDER DEBUG: extracted={extracted}", flush=True)
+    print(f"🔍 ORDER DEBUG: final_data keys={list(final_data.keys()) if isinstance(final_data, dict) else type(final_data)}", flush=True)
     
     if order_intent == "ORDER_CONFIRMED":
         print(f"🔔 Order confirmed! Saving to database...", flush=True)
+        print(f"🔔 Name: {prof['identification'].get('name','?')} | Phone: {prof['identification'].get('phone','?')} | Items: {prof['current_order'].get('items',[])} | Total: {prof['current_order'].get('total_price',0)}", flush=True)
         await handle_order_confirmation(shop_doc_id, acc_id, conv_id, user_id, token, agent_id, prof, currency, final_data)
+        print(f"✅ Order saved to Firestore!", flush=True)
     else:
         print(f"ℹ️ Order not confirmed yet (intent={order_intent})", flush=True)
 
