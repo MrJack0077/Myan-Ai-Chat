@@ -279,12 +279,6 @@ def _safe_fallback() -> dict:
         "prompt_tokens": 0,
         "candidate_tokens": 0,
     }
-            "intent": "PRODUCT_INQUIRY",
-            "is_complex": False,
-            "extracted": {},
-            "prompt_tokens": 0,
-            "candidate_tokens": 0,
-        }
 
 def _unified_fallback(error: Exception) -> dict:
     """Safe fallback — never escalate unless truly needed."""

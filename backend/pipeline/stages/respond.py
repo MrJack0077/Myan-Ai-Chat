@@ -91,13 +91,14 @@ async def send_reply(
     await send_message(acc_id, user_id, reply_text, extracted, token, detected_channel)
 
     # ── Order confirmation ──
+    order_state = prof.get("dynamics", {}).get("order_state", "NONE")
     should_confirm = (intent_type == "ORDER_CONFIRMED" or 
                       (order_state == "COLLECTING" and _is_confirmation(reply_text, user_msg)))
     
     if should_confirm:
         # Force intent to ORDER_CONFIRMED if keyword detected
         if intent_type != "ORDER_CONFIRMED":
-            print(f"🔔 Keyword override: COLLECTING + confirm → ORDER_CONFIRMED", flush=True)
+            print(f"🔔 Keyword override: COLLECTING + confirm → ORDER_CONFIRMED (user_msg='{user_msg[:50]}')", flush=True)
             unified_result["intent"] = "ORDER_CONFIRMED"
         
         print(f"🔔 Order confirmed! Saving...", flush=True)

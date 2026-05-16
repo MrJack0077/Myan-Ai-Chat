@@ -18,6 +18,9 @@ async def generate_ai_reply(
     t_start = time.time()
     print(f"⚡ Unified Agent: ONE AI call (state={order_state})...", flush=True)
 
+    # ⚡ Auto-extract items from database before AI call (keyword-based)
+    _auto_extract_items(user_msg, tool_info, profile)
+
     result = await run_unified_agent(
         user_msg=user_msg,
         chat_history=chat_history,
@@ -33,13 +36,20 @@ async def generate_ai_reply(
         currency=currency,
     )
 
-    # Normalize reply text
+    # ── Post-AI processing ──
     reply_text = result.get("reply", "")
     if isinstance(reply_text, dict):
         reply_text = reply_text.get("text") or reply_text.get("reply") or ""
     result["reply"] = str(reply_text) if reply_text else ""
 
     intent = result.get("intent", "PRODUCT_INQUIRY")
+    extracted = result.get("extracted", {})
+
+    # ⚡ Auto-extract items from AI reply if not already done
+    if not extracted.get("items") and order_state in ("COLLECTING",):
+        _auto_extract_items(reply_text, tool_info, profile)
+        if profile.get("current_order", {}).get("items"):
+            result.setdefault("extracted", {})["items"] = profile["current_order"]["items"]
 
     # Handle START_ORDER: clear old order items
     if intent == "START_ORDER":
@@ -57,6 +67,36 @@ async def generate_ai_reply(
     return result
 
 
+def _auto_extract_items(text: str, tool_info: str, profile: dict) -> None:
+    """Auto-extract product items from message by matching against database products."""
+    if not text or not tool_info or tool_info == "No products in database.":
+        return
+    
+    import re
+    text_lower = text.lower()
+    
+    # Extract product names from tool_info (format: "- Name | Price | ...")
+    product_names = re.findall(r'- ([A-Za-z0-9\s\-]+?) \|', tool_info)
+    
+    matched = []
+    for name in product_names:
+        name_clean = name.strip()
+        # Check if product name appears in user message (fuzzy match)
+        name_words = name_clean.lower().split()
+        # Match if at least 2 words of the product name appear in the user message
+        match_count = sum(1 for w in name_words if w in text_lower)
+        if match_count >= 2 or name_clean.lower() in text_lower:
+            matched.append(name_clean)
+    
+    if matched:
+        # Save to current_order.items if in order flow
+        profile.setdefault("current_order", {}).setdefault("items", [])
+        for item in matched:
+            if item not in profile["current_order"]["items"]:
+                profile["current_order"]["items"].append(item)
+                print(f"📦 Auto-added to order: {item}", flush=True)
+
+
 def _extract_phone_from_reply(reply_text: str, profile: dict) -> None:
     """Auto-extract phone number from AI-generated reply."""
     import re
@@ -69,3 +109,10 @@ def _extract_phone_from_reply(reply_text: str, profile: dict) -> None:
         if phone != current:
             profile.setdefault("identification", {})["phone"] = phone
             print(f"📱 Phone from AI reply: {phone}", flush=True)
+
+    # Also check if phone was in the reply text directly (customer said it earlier)
+    # This helps when profile has old phone that customer is updating
+    phone_match = re.search(r'(?:phone|ဖုန်း|ဖွန်း|09)\s*[:=]?\s*(\d{7,11})', reply_text, re.IGNORECASE)
+    if phone_match and not profile.get("identification", {}).get("phone"):
+        profile.setdefault("identification", {})["phone"] = "09" + phone_match.group(1) if not phone_match.group(1).startswith("09") else phone_match.group(1)
+        print(f"📱 Phone extracted from context: {profile['identification']['phone']}", flush=True)
