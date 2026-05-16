@@ -127,29 +127,12 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
     print(f"📦 DEBUG: extracted data → name={prof['identification'].get('name','?')}, phone={prof['identification'].get('phone','?')}, items={prof['current_order'].get('items',[])}", flush=True)
     await save_profile(shop_doc_id, user_id, prof)
     
-    # ── Professional Order Extraction (keyword-based, 0ms) ──
+    # ── Professional Order Data Extraction (keyword-based, 0ms) ──
     from .order_extractor import extract_order_data
     kw_data = extract_order_data(user_msg, tool_info)
     if kw_data:
-        # Apply keyword data — overwrite if new data is better quality
-        if kw_data.get("name") and len(kw_data["name"]) >= 2:
-            old_name = prof["identification"].get("name", "")
-            if not old_name or len(old_name) < 3 or len(kw_data["name"]) > len(old_name):
-                prof["identification"]["name"] = kw_data["name"]
-        if kw_data.get("phone"):
-            prof["identification"]["phone"] = kw_data["phone"]
-        if kw_data.get("address"):
-            old_addr = prof["current_order"].get("address", "")
-            # Overwrite if old address contains AI junk text
-            if not old_addr or any(ai_word in old_addr for ai_word in ['ပို့ဆောင်', 'မှာယူ', 'ငွေပေး', 'ကျေးဇူး']):
-                prof["current_order"]["address"] = kw_data["address"]
-        if kw_data.get("payment_method"):
-            prof["current_order"]["payment_method"] = kw_data["payment_method"]
-        if kw_data.get("items"):
-            prof["current_order"]["items"] = kw_data["items"]
-        if kw_data.get("total_price"):
-            prof["current_order"]["total_price"] = kw_data["total_price"]
-        print(f"🔑 Extracted: {kw_data}", flush=True)
+        _apply_extracted_data(prof, kw_data)
+        print(f"📦 Extracted: {json.dumps(kw_data, ensure_ascii=False)[:200]}", flush=True)
     
     # ── Legacy keyword extraction (backup) ──
     import re

@@ -42,7 +42,7 @@ GREETING — hello/thanks | reply warmly 1-2 sentences
 PRODUCT_INQUIRY — items/prices/colors/sizes | reply from DB info only, never invent
 START_ORDER — want to buy/order | reply: natural transition like 'အော်ဒါတင်ဖို့ နာမည်လေးပေးပါ', extracted.items=what they want
 ORDER — in order flow collecting info | ask 1 missing piece at a time
-ORDER_CONFIRMED — customer confirms details, ready to complete | is_complex=TRUE, reply: warm thank-you + confirmation
+ORDER_CONFIRMED — customer confirms all details are correct, ready to complete order | is_complex=TRUE, reply: warm thank-you + order summary
 DELIVERY — shipping/times | reply from delivery info
 PAYMENT — methods/KPay/COD | reply from payment info
 SLIP_UPLOAD — payment screenshot | reply empty
