@@ -123,16 +123,16 @@ async def run_unified_agent(
         ai_config, intent=None, extra_context=extra_ctx, shop_doc_id=shop_doc_id,
     )
 
-    # Vertex AI context cache
+    # Vertex AI context cache (disabled - causes Invalid CachedContent errors)
     cached_content_name = None
-    if shop_doc_id:
-        try:
-            from .prompts.cache import get_cached_prompt, set_cached_prompt
-            config_hash = await _get_config_hash(shop_doc_id, ai_config)
-            if config_hash:
-                cached_content_name = await get_cached_prompt(shop_doc_id, config_hash)
-        except Exception as e:
-            print(f"⚠️ Vertex Cache lookup error: {e}", flush=True)
+    # if shop_doc_id:
+    #     try:
+    #         from .prompts.cache import get_cached_prompt, set_cached_prompt
+    #         config_hash = await _get_config_hash(shop_doc_id, ai_config)
+    #         if config_hash:
+    #             cached_content_name = await get_cached_prompt(shop_doc_id, config_hash)
+    #     except Exception as e:
+    #         print(f\"⚠️ Vertex Cache lookup error: {e}\", flush=True)
 
     model_config = {
         "response_mime_type": "application/json",
@@ -189,9 +189,10 @@ async def run_unified_agent(
             "candidate_tokens": um.candidates_token_count if um else 0,
         }
 
-        # Create Vertex cache for next call
-        if not cached_content_name and shop_doc_id:
-            asyncio.create_task(_create_vertex_cache(sys_inst, contents, shop_doc_id, ai_config))
+        # Create Vertex cache for next call (disabled - causes issues)
+        # if not cached_content_name and shop_doc_id:
+        #     asyncio.create_task(_create_vertex_cache(sys_inst, contents, shop_doc_id, ai_config))
+        pass
 
         # Set defaults
         data.setdefault("intent", "PRODUCT_INQUIRY")

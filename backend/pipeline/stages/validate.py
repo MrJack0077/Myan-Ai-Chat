@@ -47,12 +47,15 @@ async def validate_request(acc_id: str, user_id: str, data: dict) -> tuple | Non
     # ── Fetch token + profile in parallel ──
     import asyncio
     token, prof = await asyncio.gather(
-        get_sendpulse_token(shop.get("client_id"), shop.get("client_secret")),
+        get_sendpulse_token(
+            shop.get("sendpulseClientId") or shop.get("client_id"),
+            shop.get("sendpulseClientSecret") or shop.get("client_secret"),
+        ),
         get_profile(shop_doc_id, user_id),
     )
 
     if not token:
-        print(f"❌ Token failed: {acc_id}", flush=True)
+        print(f"❌ Token failed for bot: '{acc_id}'. Shop may not have SendPulse credentials.", flush=True)
         await _release_lock(user_id)
         return None
 

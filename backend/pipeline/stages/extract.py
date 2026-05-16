@@ -10,6 +10,18 @@ def extract_payload_data(data: dict) -> Optional[tuple]:
     Extract core fields from the raw webhook payload.
     Returns (user_msg, acc_id, user_id, attachments) or None if invalid.
     """
+    # DEBUG: print raw payload to see format
+    import json as _json
+    raw_str = _json.dumps(data, default=str, ensure_ascii=False)[:300]
+    print(f"📋 Payload: {raw_str}...", flush=True)
+
+    # Handle list/batch — should already be split by webhook handler
+    if isinstance(data, list):
+        if data:
+            data = data[0]
+        else:
+            return None
+
     # Extract text deeply from nested structures
     user_msg = _extract_text_deeply(data)
     acc_id = _extract_bot_id(data)
@@ -22,6 +34,7 @@ def extract_payload_data(data: dict) -> Optional[tuple]:
 
     # Nothing to process
     if not user_msg and not attachments:
+        print(f"⚠️ No text/attachments found in payload. Keys: {list(data.keys())[:10]}", flush=True)
         return None
 
     if not acc_id or not user_id:
