@@ -128,11 +128,28 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
     await save_profile(shop_doc_id, user_id, prof)
     
     # ── Professional Order Data Extraction (keyword-based, 0ms) ──
-    from .order_extractor import extract_order_data
-    kw_data = extract_order_data(user_msg, tool_info)
-    if kw_data:
-        _apply_extracted_data(prof, kw_data)
-        print(f"📦 Extracted: {json.dumps(kw_data, ensure_ascii=False)[:200]}", flush=True)
+    try:
+        from .order_extractor import extract_order_data
+        kw_data = extract_order_data(user_msg, tool_info)
+        if kw_data:
+            if kw_data.get("name") and len(kw_data["name"]) >= 2:
+                prof["identification"]["name"] = kw_data["name"]
+            if kw_data.get("phone"):
+                prof["identification"]["phone"] = kw_data["phone"]
+            if kw_data.get("address"):
+                old_addr = prof["current_order"].get("address", "")
+                ai_junk = ['ပို့ဆောင်', 'မှာယူ', 'ငွေပေး', 'ကျေးဇူး']
+                if not old_addr or any(w in old_addr for w in ai_junk):
+                    prof["current_order"]["address"] = kw_data["address"]
+            if kw_data.get("payment_method"):
+                prof["current_order"]["payment_method"] = kw_data["payment_method"]
+            if kw_data.get("items"):
+                prof["current_order"]["items"] = kw_data["items"]
+            if kw_data.get("total_price"):
+                prof["current_order"]["total_price"] = kw_data["total_price"]
+            print(f"📦 Extracted: {json.dumps(kw_data, ensure_ascii=False)[:200]}", flush=True)
+    except Exception as e:
+        print(f"⚠️ Order extraction error: {e}", flush=True)
     
     # ── Legacy keyword extraction (backup) ──
     import re
