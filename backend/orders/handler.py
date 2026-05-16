@@ -92,16 +92,22 @@ def validate_order(name: str, phone: str, address: str,
     except (ValueError, TypeError):
         total = 0
     
-    if not phone or len(str(phone).strip()) < 7:
-        return False, f"Phone number required (got: '{phone}')"
+    # Minimum requirements: at least one item + customer name
     if not name or len(str(name).strip()) < 2:
         return False, f"Customer name required (got: '{name}')"
     if not items or len(items) == 0:
         return False, "No items in order"
-    # Address is optional (not all orders need delivery)
+    
+    # Phone and address are nice-to-have, not required (Myanmar context)
+    if phone and len(str(phone).strip()) < 7:
+        print(f"⚠️ Order: phone too short ('{phone}'), but accepting", flush=True)
+    if not phone:
+        print(f"⚠️ Order: no phone provided (accepted)", flush=True)
+    if not address:
+        print(f"⚠️ Order: no address provided (accepted)", flush=True)
     if not total or total <= 0:
-        print(f"⚠️ Order with zero total: items={items}, total={total}", flush=True)
-        # Allow zero total for now (AI might not calculate properly)
+        print(f"⚠️ Order with zero total: items={items}", flush=True)
+    
     return True, ""
 
 

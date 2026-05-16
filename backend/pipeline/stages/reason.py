@@ -75,18 +75,22 @@ def _auto_extract_items(text: str, tool_info: str, profile: dict) -> None:
     import re
     text_lower = text.lower()
     
-    # Extract product names from tool_info (format: "- Name | Price | ...")
-    product_names = re.findall(r'- ([A-Za-z0-9\s\-]+?) \|', tool_info)
+    # Extract product names from tool_info (format: "- Name | Price | Status: ... | Keywords: ...")
+    product_names = re.findall(r'- ([A-Za-z0-9\s\-\+]+?) \|', tool_info)
     
     matched = []
     for name in product_names:
         name_clean = name.strip()
+        if len(name_clean) < 3:
+            continue
         # Check if product name appears in user message (fuzzy match)
         name_words = name_clean.lower().split()
         # Match if at least 2 words of the product name appear in the user message
         match_count = sum(1 for w in name_words if w in text_lower)
         if match_count >= 2 or name_clean.lower() in text_lower:
-            matched.append(name_clean)
+            # Clean the name (remove leading symbols/emojis)
+            clean_name = re.sub(r'^[^\w\s]+', '', name_clean).strip()
+            matched.append(clean_name)
     
     if matched:
         # Save to current_order.items if in order flow
