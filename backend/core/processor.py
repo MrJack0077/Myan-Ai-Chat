@@ -298,6 +298,13 @@ async def process_core_logic(data):
             intent_type = "GREETING"
             print(f"⚡ Intent fix: AI={intent_type} → kw={kw_intent}", flush=True)
     
+    # ⚡ START_ORDER: clear old order items (customer wants something new)
+    if intent_type == "START_ORDER":
+        prof["current_order"]["items"] = []
+        prof["current_order"]["total_price"] = 0
+        prof["dynamics"]["order_state"] = "COLLECTING"
+        print(f"🧹 Cleared old order — starting fresh for {user_id}", flush=True)
+    
     print(f"⏱️  [5] Unified Agent done: {(time.time()-t5):.2f}s | intent={intent_type} | tokens={total_tokens}", flush=True)
     t6 = time.time()
 
@@ -347,6 +354,8 @@ async def process_core_logic(data):
         if lang.lower() in ["myanmar", "burmese", "mm"]:
             if intent_type in ("PRODUCT_INQUIRY",):
                 reply_text = "ရှာမတွေ့ပါဘူးရှင့်။ နာမည်အပြည့်အစုံလေး ပြောပေးပါဦးနော်။"
+            elif intent_type in ("START_ORDER",):
+                reply_text = "ဟုတ်ကဲ့ရှင့်။ အော်ဒါတင်ဖို့ နာမည်လေး ပြောပေးပါဦးနော်။"
             elif intent_type == "DELIVERY":
                 reply_text = "ပို့ဆောင်ရေးအကြောင်း ပြောပြပေးပါမယ်ရှင့်။ ဘယ်မြို့လဲပြောပေးပါဦး။"
             else:
