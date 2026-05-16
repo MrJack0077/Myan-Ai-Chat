@@ -245,7 +245,7 @@ async def process_core_logic(data):
     kw_intent, _ = fast_intent_classify(user_msg, order_state)
     t5 = time.time()
 
-    # ── 9. Embedding Research (only if needed) ──
+    # ── 9. Embedding Research (only if needed) + Smart Follow-up Detection ──
     SKIP_EMBEDDING_INTENTS = {"GREETING", "COMPLAINT_OR_HUMAN", "OUT_OF_DOMAIN", 
                                "DELIVERY", "PAYMENT", "POLICY_FAQ", "SLIP_UPLOAD"}
     
@@ -257,6 +257,24 @@ async def process_core_logic(data):
         research_result = await run_embedding_search(user_msg, shop_doc_id, currency)
         tool_info, msg_emb = research_result
         print(f"⏱️  Embedding Research: {(time.time()-t_research):.2f}s", flush=True)
+    
+    # ⚡ SMART FOLLOW-UP: if message is vague ("how much", "i want to buy it") and tool_info is empty/no match,
+    # inject the last discussed product from chat history into tool_info so AI knows context
+    if tool_info and "No items" in str(tool_info) and msg_emb is None:
+        vague_patterns = ['how much', 'i want', 'buy', 'take', 'price', 'ဘယ်လောက်', 'ယူမယ်', 'ဝယ်', 'ဈေး']
+        if any(p in user_msg.lower() for p in vague_patterns):
+            # Extract last product from chat history
+            if chat_history:
+                import re as _ctx_re
+                # Find last product mentioned by AI in chat history
+                ai_lines = [l for l in chat_history.split('\n') if l.startswith('AI:')]
+                if ai_lines:
+                    last_ai = ai_lines[-1]
+                    # Try to find product name patterns: "Camera E1", "Product Name", etc.
+                    product_matches = _ctx_re.findall(r'(?:Camera|IPhone|Samsung|Xiaomi|Oppo|Vivo|Apple\s*Watch|iPad|AirPods|JBL|Aqara)[\w\s]*\w', last_ai, _ctx_re.IGNORECASE)
+                    if product_matches:
+                        tool_info = f"[Last Discussed Product]\n{product_matches[-1]} — from previous conversation\n\n{tool_info}"
+                        print(f"🧠 Injected last product context: {product_matches[-1]}", flush=True)
     
     # ── 10. UNIFIED AGENT — AI decides intent, reply, extraction (NO keyword override) ──
     from agents.unified_agent import run_unified_agent

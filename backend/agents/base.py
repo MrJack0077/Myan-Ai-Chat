@@ -53,7 +53,7 @@ async def call_agent_model(base_model_name, sys_inst, contents, response_schema,
                 contents=contents,
                 config=generate_config,
             ),
-            timeout=15.0  # ⚡ 15s max — don't keep customer waiting
+            timeout=20.0  # ⚡ 20s max
         )
     except asyncio.TimeoutError:
         print(f"⏰ AI timeout ({base_model_name}) — using fallback", flush=True)
