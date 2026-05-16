@@ -2,6 +2,7 @@
 Agent routing logic — selects the appropriate AI agent based on intent, order state,
 and media presence. Extracted from processor.py to keep it under 400 lines.
 """
+import json
 from utils import BASE_MODEL_NAME
 from agents.product_agent import run_product_agent
 from agents.media_agent import run_media_agent
@@ -22,6 +23,11 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
     photo_context: Pre-analyzed image context (payment slip / product match).
     """
     is_inquiry = intent_type in ["PRODUCT_INQUIRY", "DELIVERY", "PAYMENT", "POLICY_FAQ"]
+
+    # ⚡ CRITICAL: if customer is in active order flow, ALWAYS use order agent
+    # regardless of what intent_type says — prevent "yes kpay" from going to product agent
+    if order_state in ["COLLECTING", "WAITING_FOR_SLIP", "SUMMARY_SENT"]:
+        is_inquiry = False  # Force order agent path
 
     # Service booking flow
     is_service = prof.get("service_type") or intent_type == "SERVICE"
@@ -133,13 +139,17 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
         kw_data = extract_order_data(user_msg, tool_info)
         if kw_data:
             if kw_data.get("name") and len(kw_data["name"]) >= 2:
-                prof["identification"]["name"] = kw_data["name"]
+                old_name = prof["identification"].get("name", "")
+                # Overwrite if old name is corrupted (short/truncated) or new is better
+                if not old_name or len(old_name) < 3 or len(kw_data["name"]) > len(old_name):
+                    prof["identification"]["name"] = kw_data["name"]
             if kw_data.get("phone"):
                 prof["identification"]["phone"] = kw_data["phone"]
             if kw_data.get("address"):
                 old_addr = prof["current_order"].get("address", "")
-                ai_junk = ['ပို့ဆောင်', 'မှာယူ', 'ငွေပေး', 'ကျေးဇူး']
-                if not old_addr or any(w in old_addr for w in ai_junk):
+                ai_junk = ['ပို့ဆောင်', 'မှာယူ', 'ငွေပေး', 'ကျေးဇူး', 'အော်ဒါ']
+                # Overwrite if old address has AI junk or empty
+                if not old_addr or any(w in old_addr for w in ai_junk) or len(kw_data["address"]) < len(old_addr):
                     prof["current_order"]["address"] = kw_data["address"]
             if kw_data.get("payment_method"):
                 prof["current_order"]["payment_method"] = kw_data["payment_method"]
