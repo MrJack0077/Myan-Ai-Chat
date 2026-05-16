@@ -101,9 +101,23 @@ async def run_unified_agent(
     extra_ctx += [
         f"[PAYMENT METHODS] {pmt_str}, COD",
         f"[CURRENCY] {currency}",
-        f"[DATABASE INFO]\n{tool_info if tool_info else 'No products in database.'}",
-        INTENT_GUIDE,
     ]
+
+    # ⚡ DELIVERY INFO — always include so AI doesn't invent prices
+    if delivery_info:
+        deli_lines = []
+        for d in delivery_info:
+            city = d.get("city", "?")
+            price = d.get("price", "?")
+            days = d.get("days", "?")
+            deli_lines.append(f"  {city}: {price} MMK ({days})")
+        extra_ctx.append(f"[DELIVERY INFO — USE THESE EXACT PRICES]\n" + "\n".join(deli_lines))
+        extra_ctx.append(f"  ⚡ Always quote delivery from this list. If city not listed, say 'မြို့ပေါ်မူတည်ပါတယ်'.")
+    else:
+        extra_ctx.append(f"[DELIVERY INFO] Not configured. Never invent delivery prices — say 'အော်ဒါတင်ပြီးမှ အတိအကျပြောပေးပါမယ်ရှင့်'.")
+
+    extra_ctx.append(f"[DATABASE INFO]\n{tool_info if tool_info else 'No products in database.'}")
+    extra_ctx.append(INTENT_GUIDE)
 
     # AI Training Page data → prompt
     constraints = ai_config.get("constraints", [])
@@ -157,10 +171,13 @@ async def run_unified_agent(
 
     gen_config = genai.types.GenerateContentConfig(**model_config)
 
-    # Build contents
+    # Build contents — include proper conversation context
     contents = []
     if chat_history:
-        contents.append(f"Recent Chat:\n{chat_history}\n---")
+        # Take last 8 messages for memory context
+        lines = chat_history.strip().split("\n")
+        recent = lines[-16:] if len(lines) > 16 else lines  # 8 exchanges = 16 lines
+        contents.append(f"[RECENT CONVERSATION — LAST 8 MESSAGES]\n" + "\n".join(recent) + "\n---")
     if media_parts:
         for part in media_parts:
             if isinstance(part, dict) and part.get("mime_type") and part.get("data"):
@@ -168,13 +185,39 @@ async def run_unified_agent(
     contents.append(f"Customer: {user_msg}")
 
     t_start = time.time()
-    try:
-        res = await asyncio.wait_for(
-            genai_client.aio.models.generate_content(
-                model=BASE_MODEL_NAME, contents=contents, config=gen_config,
-            ),
-            timeout=8.0,
-        )
+    last_error_msg = ""
+    
+    for attempt in range(2):  # ⚡ 2 attempts max
+        try:
+            res = await asyncio.wait_for(
+                genai_client.aio.models.generate_content(
+                    model=BASE_MODEL_NAME, contents=contents, config=gen_config,
+                ),
+                timeout=8.0,
+            )
+            break  # Success — exit retry loop
+        except asyncio.TimeoutError:
+            if attempt == 0:
+                print(f"⚠️ AI timeout, retrying... (attempt {attempt+1}/2)", flush=True)
+                await asyncio.sleep(0.5)
+                continue
+            # Both attempts timed out — return fallback
+            print(f"❌ AI timed out after 2 attempts", flush=True)
+            return _safe_fallback()
+        except Exception as e:
+            error_str = str(e)
+            last_error_msg = error_str[:200]
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                if attempt == 0:
+                    wait = 1.5
+                    print(f"⚠️ AI rate limited (429), retrying in {wait}s...", flush=True)
+                    await asyncio.sleep(wait)
+                    continue
+                print(f"❌ AI rate limited after 2 attempts", flush=True)
+                return _safe_fallback()
+            # Non-retriable error
+            print(f"🔥 AI call failed: {error_str[:200]}", flush=True)
+            return _safe_fallback()
         clean = re.sub(r'```json\n|\n```|```', '', str(res.text)).strip()
 
         # Parse JSON response
@@ -217,14 +260,18 @@ async def run_unified_agent(
 
         return data
 
-    except Exception as e:
-        import traceback
-        print(f"🔥 Unified Agent Error: {e}", flush=True)
-        traceback.print_exc()
-        # Return fallback with empty reply (safe default)
-        return {
-            "reasoning": f"Error: {str(e)[:200]}",
-            "reply": "ခဏစောင့်ပေးပါရှင့်။ ပြန်ကြိုးစားပါမယ်။",
+
+def _safe_fallback() -> dict:
+    """Safe fallback reply when AI is completely unavailable (429/timeout)."""
+    return {
+        "reasoning": "AI unavailable",
+        "reply": "ခဏစောင့်ပေးပါရှင့်။ ပြန်ကြိုးစားပါမယ်။",
+        "intent": "PRODUCT_INQUIRY",
+        "is_complex": False,
+        "extracted": {},
+        "prompt_tokens": 0,
+        "candidate_tokens": 0,
+    }
             "intent": "PRODUCT_INQUIRY",
             "is_complex": False,
             "extracted": {},
