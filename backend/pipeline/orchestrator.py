@@ -102,6 +102,33 @@ async def process_core_logic(data: dict) -> None:
 
     # ── Stage 7: Send reply + handle order ──
     try:
+        # ⚡ Update profile with AI-extracted data BEFORE order save
+        extracted_data = unified_result.get("extracted", {})
+        intent_type = unified_result.get("intent", "")
+        
+        if extracted_data:
+            ident = prof.setdefault("identification", {})
+            order = prof.setdefault("current_order", {})
+            
+            if extracted_data.get("name"):
+                ident["name"] = extracted_data["name"]
+            if extracted_data.get("phone"):
+                ident["phone"] = str(extracted_data["phone"])
+            if extracted_data.get("address"):
+                ident["address"] = extracted_data["address"]
+            if extracted_data.get("items"):
+                order["items"] = extracted_data["items"]
+            if extracted_data.get("total_price"):
+                order["total_price"] = extracted_data["total_price"]
+            if extracted_data.get("payment_method"):
+                order["payment_method"] = extracted_data["payment_method"]
+            
+            # Save profile so order confirmation has latest data
+            if intent_type == "ORDER_CONFIRMED":
+                from customers.profile import save_profile as _save
+                await _save(shop_doc_id, user_id, prof)
+                print(f"📝 Profile updated with extracted data for order", flush=True)
+        
         # Detect channel from shop's sendpulseBots
         detected_channel = ""
         bots = shop.get("sendpulseBots", [])

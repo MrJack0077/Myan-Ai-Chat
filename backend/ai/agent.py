@@ -35,13 +35,13 @@ class UnifiedAgentResponse(typing_extensions.TypedDict):
 
 # ── Compact intent guide (injected into system prompt) ──
 INTENT_GUIDE = """INTENTS (pick one):
-GREETING — hello/thanks | reply warmly 1-2 sentences
+GREETING — hello/thanks/mingalarbar | reply warmly 1-2 sentences
 PRODUCT_INQUIRY — items/prices/colors/sizes | reply from DB, never invent
-START_ORDER — want to buy/order | reply: natural transition to order flow
+START_ORDER — want to buy/order. Myanmar trigger words: ယူမယ်, ဝယ်မယ်, မှာမယ်, အော်ဒါတင်, လိုချင်တယ်, ကြိုက်တယ်. Reply: natural transition 'အော်ဒါတင်ဖို့ နာမည်လေးပေးပါရှင့်' | SET intent=START_ORDER, extracted.items=what they want
 ORDER — in order flow collecting info | ask 1 missing piece at a time
-ORDER_CONFIRMED — customer confirms all details, ready to complete | is_complex=TRUE, reply: warm thank-you + summary
-DELIVERY — shipping/times | reply from delivery info
-PAYMENT — methods/KPay/COD | reply from payment info
+ORDER_CONFIRMED — customer confirms ALL details correct | is_complex=TRUE, reply: warm thank-you + full order summary
+DELIVERY — shipping/times/ပို့ခ/ရောက်ချိန် | reply from delivery info
+PAYMENT — methods/KPay/COD/ငွေပေးချေ | reply from payment info
 SLIP_UPLOAD — payment screenshot | reply empty
 POLICY_FAQ — refunds/returns/warranty | reply from policy
 COMPLAINT_OR_HUMAN — upset/complex/want human | is_complex=TRUE, reply empathy
@@ -54,7 +54,8 @@ RULES:
 - If DB has no match: say "မရှိပါရှင့်" not "I think maybe..."
 - Extract name/phone/address/items naturally from conversation.
 - buttons: max 3 quick-reply options.
-- COMPLAINT only: is_complex=TRUE. Everything else: false."""
+- COMPLAINT only: is_complex=TRUE. Everything else: false.
+- START_ORDER: ONLY set when customer clearly wants to buy. 'ယူမယ်', 'ဝယ်မယ်', 'မှာမယ်' = START_ORDER. Do NOT set START_ORDER for just browsing or asking prices."""
 
 
 async def run_unified_agent(
@@ -220,7 +221,16 @@ async def run_unified_agent(
         import traceback
         print(f"🔥 Unified Agent Error: {e}", flush=True)
         traceback.print_exc()
-        return _unified_fallback(e)
+        # Return fallback with empty reply (safe default)
+        return {
+            "reasoning": f"Error: {str(e)[:200]}",
+            "reply": "ခဏစောင့်ပေးပါရှင့်။ ပြန်ကြိုးစားပါမယ်။",
+            "intent": "PRODUCT_INQUIRY",
+            "is_complex": False,
+            "extracted": {},
+            "prompt_tokens": 0,
+            "candidate_tokens": 0,
+        }
 
 def _unified_fallback(error: Exception) -> dict:
     """Safe fallback — never escalate unless truly needed."""

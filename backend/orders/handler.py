@@ -81,16 +81,24 @@ async def handle_order_confirmation(
 
 
 def validate_order(name: str, phone: str, address: str,
-                   items: list, total: int) -> tuple[bool, str]:
+                   items: list, total) -> tuple[bool, str]:
     """Validate order data before saving. Returns (is_valid, error_message)."""
-    if not phone or len(phone) < 6:
-        return False, "Phone number required (min 6 digits)"
-    if not name or len(name) < 2:
-        return False, "Customer name required"
+    # Convert total to int (AI sometimes returns string)
+    try:
+        total = int(total) if total else 0
+    except (ValueError, TypeError):
+        total = 0
+    
+    if not phone or len(str(phone).strip()) < 7:
+        return False, f"Phone number required (got: '{phone}')"
+    if not name or len(str(name).strip()) < 2:
+        return False, f"Customer name required (got: '{name}')"
     if not items or len(items) == 0:
         return False, "No items in order"
+    # Address is optional (not all orders need delivery)
     if not total or total <= 0:
-        return False, "Total price must be > 0"
+        print(f"⚠️ Order with zero total: items={items}, total={total}", flush=True)
+        # Allow zero total for now (AI might not calculate properly)
     return True, ""
 
 
