@@ -19,7 +19,7 @@ async def worker_process(worker_id: int) -> None:
         try:
             data = await pop_from_queue(timeout=5.0)
             if data is None:
-                _print_idle(worker_id)
+                await _print_idle(worker_id)
                 continue
 
             # Process the message

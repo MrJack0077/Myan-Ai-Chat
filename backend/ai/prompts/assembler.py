@@ -4,10 +4,10 @@ Orchestrates sub-modules to build the full system prompt.
 """
 import hashlib
 from config import r
-from .prompts.identity import build_identity
-from .prompts.style import build_communication_rules
-from .prompts.knowledge import build_knowledge_blocks
-from .prompts.cache import get_cached_prompt, set_cached_prompt
+from .identity import build_identity
+from .style import build_communication_rules
+from .knowledge import build_knowledge_blocks
+from .cache import get_cached_prompt, set_cached_prompt
 
 
 async def assemble_system_prompt(
