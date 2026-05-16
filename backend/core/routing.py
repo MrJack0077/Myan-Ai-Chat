@@ -179,9 +179,8 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
             prof["identification"]["phone"] = pm.group(1)
             print(f"🔑 Extracted phone: {prof['identification']['phone']}", flush=True)
     
-    # Address
+    # Address — strict patterns to avoid extracting AI reply text
     if not prof["current_order"].get("address"):
-        # Myanmar address patterns — be strict to avoid AI text
         addr_pats = [
             r'(?:No\.?\s*\d+|အမှတ်\s*\d+)[\s,，]+([A-Za-z\u1000-\u109F\s]{5,40}?)(?:\.|$|\n|၊)',
             r'(?:ရန်ကုန်|မန္တလေး|နေပြည်တော်|yangon|mandalay|dagon|တာမွေ|ဗဟန်း|လှိုင်|သာကေ|မရမ်း)[\w\u1000-\u109F\s,]{5,30}',
@@ -190,7 +189,9 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
             am = re.search(pat, user_msg, re.IGNORECASE)
             if am:
                 addr = am.group(0).strip()
-                if len(addr) >= 5 and len(addr) <= 100:
+                # Filter out AI reply text (contains keywords like ပို့ဆောင်, မှာယူ, ကျေးဇူး, etc.)
+                ai_junk_words = ['ပို့ဆောင်', 'မှာယူ', 'ကျေးဇူး', 'ငွေပေး', 'အော်ဒါ', 'စျေးဝယ်']
+                if len(addr) >= 5 and len(addr) <= 100 and not any(w in addr for w in ai_junk_words):
                     prof["current_order"]["address"] = addr
                     print(f"🔑 Extracted address: {addr[:50]}", flush=True)
                     break
@@ -212,6 +213,10 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
                         # Clean formatting junk from product name
                         product_name = re.sub(r'^[📦🛒🛍️\s]+', '', product_name)
                         product_name = re.sub(r'\s{2,}', ' ', product_name)
+                        # Remove leading "Name:" prefix
+                        product_name = re.sub(r'^Name:\s*', '', product_name, flags=re.IGNORECASE)
+                        # Trim trailing whitespace and pipe chars
+                        product_name = product_name.strip().rstrip('|').strip()
                         if product_name and len(product_name) >= 3:
                             prof["current_order"]["items"] = [product_name]
                             print(f"🔑 Auto-populated items: [{product_name}]", flush=True)
