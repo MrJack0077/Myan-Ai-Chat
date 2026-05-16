@@ -40,6 +40,17 @@ async def handle_order_confirmation(
         await save_profile(shop_doc_id, user_id, prof)
         return  # Don't save invalid order
 
+    # ── Clean item names (remove leading junk characters) ──
+    import re as _re
+    clean_items = []
+    for item in order_items:
+        if isinstance(item, str):
+            # Remove leading non-alphanumeric except -, space, +, numbers
+            clean = _re.sub(r'^[^\w\s\-\+]+', '', str(item)).strip()
+            if clean and len(clean) > 2:
+                clean_items.append(clean)
+    order_items = clean_items
+
     # ── Save order ──
     order_data = {
         "shop_doc_id": shop_doc_id,
