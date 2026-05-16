@@ -34,19 +34,31 @@ async def process_core_logic(data: dict) -> None:
     # ── Stage 1: Extract payload data ──
     extracted = extract_payload_data(data)
     if not extracted:
+        print("⚠️ Pipeline: extract_payload_data returned None", flush=True)
         return
     user_msg, acc_id, user_id, attachments = extracted
 
     print(f"\n📩 Pipeline START for {user_id} | msg: '{user_msg[:60]}...'", flush=True)
 
     # ── Stage 2: Validate (rate limit, plan, lock) ──
-    result = await validate_request(acc_id, user_id, data)
+    try:
+        result = await validate_request(acc_id, user_id, data)
+    except Exception as e:
+        print(f"🔥 Pipeline: validate_request CRASH: {e}", flush=True)
+        import traceback; traceback.print_exc()
+        return
     if not result:
+        print(f"⚠️ Pipeline: validate_request returned None for {user_id}", flush=True)
         return
     shop, shop_doc_id, token, prof = result
 
     # ── Stage 3: Load profile + update state ──
-    prof, order_state = await load_and_update_profile(prof, shop_doc_id, user_id, user_msg)
+    try:
+        prof, order_state = await load_and_update_profile(prof, shop_doc_id, user_id, user_msg)
+    except Exception as e:
+        print(f"🔥 Pipeline: load_and_update_profile CRASH: {e}", flush=True)
+        import traceback; traceback.print_exc()
+        return
     if order_state == "HUMAN_HANDOVER":
         return  # Admin is handling
 
@@ -68,35 +80,44 @@ async def process_core_logic(data: dict) -> None:
 
     # ── Stage 6: AI reasoning ──
     shop_info = shop.get("shop_info", {})
-    unified_result = await generate_ai_reply(
-        user_msg=user_msg,
-        chat_history=chat_history,
-        profile=prof,
-        ai_config=ai_config,
-        tool_info=tool_info,
-        order_state=order_state,
-        media_parts=media_parts,
-        photo_context=photo_context,
-        shop_doc_id=shop_doc_id,
-        delivery_info=shop_info.get("deliveryInfo", []),
-        payment_info=shop_info.get("paymentInfo", []),
-        currency=shop_info.get("currency", "MMK"),
-    )
+    try:
+        unified_result = await generate_ai_reply(
+            user_msg=user_msg,
+            chat_history=chat_history,
+            profile=prof,
+            ai_config=ai_config,
+            tool_info=tool_info,
+            order_state=order_state,
+            media_parts=media_parts,
+            photo_context=photo_context,
+            shop_doc_id=shop_doc_id,
+            delivery_info=shop_info.get("deliveryInfo", []),
+            payment_info=shop_info.get("paymentInfo", []),
+            currency=shop_info.get("currency", "MMK"),
+        )
+    except Exception as e:
+        print(f"🔥 Pipeline: generate_ai_reply CRASH: {e}", flush=True)
+        import traceback; traceback.print_exc()
+        return
 
     # ── Stage 7: Send reply + handle order ──
-    await send_reply(
-        unified_result=unified_result,
-        acc_id=acc_id,
-        user_id=user_id,
-        conv_id=conv_id,
-        shop_doc_id=shop_doc_id,
-        token=token,
-        prof=prof,
-        currency=shop_info.get("currency", "MMK"),
-        channel=shop.get("channel", ""),
-        agent_id=shop.get("agentId"),
-        lang=ai_config.get("responseLanguage", "Myanmar"),
-    )
+    try:
+        await send_reply(
+            unified_result=unified_result,
+            acc_id=acc_id,
+            user_id=user_id,
+            conv_id=conv_id,
+            shop_doc_id=shop_doc_id,
+            token=token,
+            prof=prof,
+            currency=shop_info.get("currency", "MMK"),
+            channel=shop.get("channel", ""),
+            agent_id=shop.get("agentId"),
+            lang=ai_config.get("responseLanguage", "Myanmar"),
+        )
+    except Exception as e:
+        print(f"🔥 Pipeline: send_reply CRASH: {e}", flush=True)
+        import traceback; traceback.print_exc()
 
     # ── Stage 8: Finalize (analytics, summary, cache) ──
     await finalize_pipeline(
