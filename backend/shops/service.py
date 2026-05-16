@@ -39,9 +39,17 @@ async def get_shop_data(acc_id: str) -> dict | None:
 
         for doc in all_docs:
             data = doc.to_dict() if callable(doc.to_dict) else {}
+            
+            # DEBUG: Print all keys of each shop
+            print(f"🛒 Shop {doc.id[:20]}... keys: {list(data.keys())[:20]}", flush=True)
 
-            # Match by sendpulseBotIds array
-            bot_ids = data.get("sendpulseBotIds", [])
+            # Match by sendpulseBotIds array — try multiple field name variants
+            bot_ids = (data.get("sendpulseBotIds") or data.get("sendpulseBotIDs")
+                       or data.get("sendpulse_bot_ids") or data.get("botIds")
+                       or data.get("bot_ids") or [])
+            
+            if isinstance(bot_ids, str):
+                bot_ids = [bot_ids]  # Single bot ID as string
             if acc_id in bot_ids:
                 data["shop_doc_id"] = doc.id
                 print(f"✅ Found by sendpulseBotIds: {data.get('name', doc.id)}", flush=True)
