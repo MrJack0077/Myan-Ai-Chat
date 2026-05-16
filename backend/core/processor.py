@@ -18,7 +18,6 @@ from .data_extractor import extract_text_deeply, extract_bot_id, extract_user_id
 from .greeting_router import run_greeting_router
 from .semantic_research import run_embedding_search, check_semantic_cache, save_to_semantic_cache_async
 from .order_handler import send_typing, send_stop_typing, handle_escalation, handle_order_confirmation
-from .intent_classifier import fast_intent_classify
 from .cache_manager import invalidate_shop_caches
 from .conversation_memory import (
     build_conversation_context, needs_summarization, count_customer_messages,
@@ -241,40 +240,29 @@ async def process_core_logic(data):
     print(f"⏱️  [3] Config+Typing+History: {(time.time()-t3):.2f}s", flush=True)
     t4 = time.time()
 
-    # ── 8. Keyword Intent Classify (0ms) — for embedding skip only, NOT for intent decision ──
-    kw_intent, _ = fast_intent_classify(user_msg, order_state)
+    # ── 9. Embedding Research (always run for non-greeting messages) ──
     t5 = time.time()
-
-    # ── 9. Embedding Research (only if needed) + Smart Follow-up Detection ──
-    SKIP_EMBEDDING_INTENTS = {"GREETING", "COMPLAINT_OR_HUMAN", "OUT_OF_DOMAIN", 
-                               "DELIVERY", "PAYMENT", "POLICY_FAQ", "SLIP_UPLOAD"}
     
-    if kw_intent in SKIP_EMBEDDING_INTENTS:
-        print(f"⚡ Embedding SKIP: intent={kw_intent} — 0ms", flush=True)
-        tool_info, msg_emb = "No items needed", None
-    else:
-        t_research = time.time()
-        research_result = await run_embedding_search(user_msg, shop_doc_id, currency)
-        tool_info, msg_emb = research_result
-        print(f"⏱️  Embedding Research: {(time.time()-t_research):.2f}s", flush=True)
+    t_research = time.time()
+    research_result = await run_embedding_search(user_msg, shop_doc_id, currency)
+    tool_info, msg_emb = research_result
+    print(f"⏱️  Embedding Research: {(time.time()-t_research):.2f}s", flush=True)
     
-    # ⚡ SMART FOLLOW-UP: if message is vague ("how much", "i want to buy it") and tool_info is empty/no match,
-    # inject the last discussed product from chat history into tool_info so AI knows context
-    if tool_info and "No items" in str(tool_info) and msg_emb is None:
-        vague_patterns = ['how much', 'i want', 'buy', 'take', 'price', 'ဘယ်လောက်', 'ယူမယ်', 'ဝယ်', 'ဈေး']
-        if any(p in user_msg.lower() for p in vague_patterns):
-            # Extract last product from chat history
-            if chat_history:
-                import re as _ctx_re
-                # Find last product mentioned by AI in chat history
-                ai_lines = [l for l in chat_history.split('\n') if l.startswith('AI:')]
-                if ai_lines:
-                    last_ai = ai_lines[-1]
-                    # Try to find product name patterns: "Camera E1", "Product Name", etc.
-                    product_matches = _ctx_re.findall(r'(?:Camera|IPhone|Samsung|Xiaomi|Oppo|Vivo|Apple\s*Watch|iPad|AirPods|JBL|Aqara)[\w\s]*\w', last_ai, _ctx_re.IGNORECASE)
-                    if product_matches:
-                        tool_info = f"[Last Discussed Product]\n{product_matches[-1]} — from previous conversation\n\n{tool_info}"
-                        print(f"🧠 Injected last product context: {product_matches[-1]}", flush=True)
+    # ⚡ SMART FOLLOW-UP: inject last product when message is vague
+    vague_patterns = ['how much', 'i want', 'buy', 'take', 'price', 'ဘယ်လောက်', 'ယူမယ်', 'ဝယ်', 'ဈေး']
+    if any(p in user_msg.lower() for p in vague_patterns):
+        # Extract last product from chat history
+        if chat_history:
+            import re as _ctx_re
+            # Find last product mentioned by AI in chat history
+            ai_lines = [l for l in chat_history.split('\n') if l.startswith('AI:')]
+            if ai_lines:
+                last_ai = ai_lines[-1]
+                # Try to find product name patterns: "Camera E1", "Product Name", etc.
+                product_matches = _ctx_re.findall(r'(?:Camera|IPhone|Samsung|Xiaomi|Oppo|Vivo|Apple\s*Watch|iPad|AirPods|JBL|Aqara)[\w\s]*\w', last_ai, _ctx_re.IGNORECASE)
+                if product_matches:
+                    tool_info = f"[Last Discussed Product]\n{product_matches[-1]} — from previous conversation\n\n{tool_info}"
+                    print(f"🧠 Injected last product context: {product_matches[-1]}", flush=True)
     
     # ── 10. UNIFIED AGENT — AI decides intent, reply, extraction (NO keyword override) ──
     from agents.unified_agent import run_unified_agent
@@ -350,7 +338,8 @@ async def process_core_logic(data):
         user_msg = f"[CUSTOMER MEMORY]\n{memory_ctx}\n\n{user_msg}"
 
     # ── 13. Escalation ──
-    if is_complex or intent_type == "COMPLAINT_OR_HUMAN":
+    # ORDER_CONFIRMED is NOT an escalation — it's a successful order
+    if (is_complex and intent_type != "ORDER_CONFIRMED") or intent_type == "COMPLAINT_OR_HUMAN":
         ai_escalation_reply = reply_text
         reply_text = await handle_escalation(
             shop_doc_id, acc_id, conv_id, user_id, token, agent_id, intent_type, lang,
