@@ -8,37 +8,44 @@ import re
 
 # Keyword → (intent, skip_automation)
 # skip_automation=True means the intent is clear enough to skip the AI classifier
+# NOTE: Using (?<![a-zA-Z\u1000-\u109F]) instead of \b because \b doesn't work with Myanmar Unicode
 KEYWORD_INTENTS = [
+    # ── ORDER (Phone) — must come FIRST to catch phone numbers ──
+    (r'(?<!\d)(09\d{7,10}|\+?959\d{7,9})(?!\d)', 'ORDER', True),
+
     # ── PRODUCT_INQUIRY ──
-    (r'\b(ဈေး|ဘယ်လောက်|စျေး|ဘယ်လောက်လဲ|ဈေးနှုန်း|price|how much|cost|how many kyat)\b', 'PRODUCT_INQUIRY', True),
-    (r'\b(အရောင်|ဆိုဒ်|size|color|colour|အနီ|အပြာ|အစိမ်း|အနက်|အဖြူ)\b', 'PRODUCT_INQUIRY', True),
-    (r'\b(ရှိလား|ရလား|ရတာလား|ရပါသလား|ရှိပါသလား|ရနိုင်လား|available|in stock|stock|န်းလား)\b', 'PRODUCT_INQUIRY', True),
-    (r'\b(ပစ္စည်း|product|item|ပစ္စည်းတွေ|products|items|ပဲရတာ|ဘာတွေရ|ဘာရလဲ|ဘာတွေရှိ)\b', 'PRODUCT_INQUIRY', True),
+    (r'(?<![a-zA-Z\u1000-\u109F])(ဈေး|ဘယ်လောက်|စျေး|ဘယ်လောက်လဲ|ဈေးနှုန်း|price|how much|cost|how many kyat)(?![a-zA-Z\u1000-\u109F])', 'PRODUCT_INQUIRY', True),
+    (r'(?<![a-zA-Z\u1000-\u109F])(အရောင်|ဆိုဒ်|size|colors?|colou?rs?|အနီ|အပြာ|အစိမ်း|အနက်|အဖြူ)(?![a-zA-Z\u1000-\u109F])', 'PRODUCT_INQUIRY', True),
+    (r'(?<![a-zA-Z\u1000-\u109F])(ရှိလား|ရလား|ရတာလား|ရပါသလား|ရှိပါသလား|ရနိုင်လား|available|in stock|stock|န်းလား)(?![a-zA-Z\u1000-\u109F])', 'PRODUCT_INQUIRY', True),
+    (r'(?<![a-zA-Z\u1000-\u109F])(ပစ္စည်း|product|item|ပစ္စည်းတွေ|products|items|ပဲရတာ|ဘာတွေရ|ဘာရလဲ|ဘာတွေရှိ)(?![a-zA-Z\u1000-\u109F])', 'PRODUCT_INQUIRY', True),
 
     # ── DELIVERY ──
-    (r'\b(ပို့|ပို့ဆောင်|delivery|shipping|ရက်|ကြာ|duration|ဘယ်နှစ်ရက်|ရောက်|deliver|delivered)\b', 'DELIVERY', True),
+    (r'(?<![a-zA-Z\u1000-\u109F])(ပို့|ပို့ဆောင်|delivery|shipping|ရက်|ကြာ|duration|days|ဘယ်နှစ်ရက်|ရောက်|deliver|delivered|ဘယ်နှစ်)(?![a-zA-Z\u1000-\u109F])', 'DELIVERY', True),
 
     # ── PAYMENT ──
-    (r'\b(ငွေချေ|ငွေပေး|payment|pay|kpay|wave pay|cod|cash|ဘယ်လိုပေး|ဘယ်လိုပေးရ)\b', 'PAYMENT', True),
+    (r'(?<![a-zA-Z\u1000-\u109F])(ငွေချေ|ငွေပေး|payment|pay|kpay|wave|cod|cash|ဘယ်လိုပေး|ဘယ်လိုပေးရ|ဘယ်လိုပေး)(?![a-zA-Z\u1000-\u109F])', 'PAYMENT', True),
 
     # ── START_ORDER ──
-    (r'\b(ယူမယ်|ဝယ်မယ်|မှာမယ်|order|buy|purchase|တင်ပေး|မှာပေး|လိုချင်|ကြိုက်)\b', 'START_ORDER', False),
+    (r'(?<![a-zA-Z\u1000-\u109F])(ယူမယ်|ဝယ်မယ်|မှာမယ်|order|buy|purchase|တင်ပေး|မှာပေး|လိုချင်|ကြိုက်)(?![a-zA-Z\u1000-\u109F])', 'START_ORDER', False),
 
     # ── SERVICE ──
-    (r'\b(ဝန်ဆောင်မှု|service|booking|appointment|ရက်ချိန်း|ကြိုချိန်း|reserve|schedule|ပြင်ဆင်|ပြုပြင်|repair|maintenance)\b', 'SERVICE', True),
+    (r'(?<![a-zA-Z\u1000-\u109F])(ဝန်ဆောင်မှု|service|booking|appointment|ရက်ချိန်း|ကြိုချိန်း|reserve|schedule|ပြင်ဆင်|ပြုပြင်|repair|maintenance)(?![a-zA-Z\u1000-\u109F])', 'SERVICE', True),
 
     # ── POLICY ──
-    (r'\b(return|refund|exchange|ပြန်|လဲ|အာမခံ|warranty|guarantee|policy|စည်းမျဉ်း)\b', 'POLICY_FAQ', True),
+    (r'(?<![a-zA-Z\u1000-\u109F])(return|refund|exchange|ပြန်|လဲ|အာမခံ|warranty|guarantee|policy|စည်းမျဉ်း)(?![a-zA-Z\u1000-\u109F])', 'POLICY_FAQ', True),
 
     # ── COMPLAINT ──
-    (r'\b(မကောင်း|ပျက်စီး|damaged|broken|wrong|မှား|တိုင်ချင်|complain|စိတ်တို|မကျေနပ်)\b', 'COMPLAINT_OR_HUMAN', False),
+    (r'(?<![a-zA-Z\u1000-\u109F])(မကောင်း|ပျက်စီး|damaged|broken|wrong|မှား|တိုင်ချင်|complain|စိတ်တို|မကျေနပ်)(?![a-zA-Z\u1000-\u109F])', 'COMPLAINT_OR_HUMAN', False),
 
-    # ── GREETING ──
+    # ── GREETING (full line match only) ──
     (r'^(hi|hello|hey|မင်္ဂလာပါ|ဟိုင်း|နေကောင်း|good morning|good afternoon|good evening)[\s!]*$', 'GREETING', True),
     (r'^(thanks|thank you|ကျေးဇူး|ကျေးဇူးပါ|ok|okay|ဟုတ်)[\s!]*$', 'GREETING', True),
     
     # ── SLIP_UPLOAD ──
-    (r'\b(ပို့ပြီး|လွှဲပြီး|ပေးပြီး|paid|sent|transfer|slip|ဖြတ်ပိုင်း|ငွေလွှဲ|ပို့လိုက်|ပို့ထား)\b', 'SLIP_UPLOAD', True),
+    (r'(?<![a-zA-Z\u1000-\u109F])(ပို့ပြီး|လွှဲပြီး|ပေးပြီး|paid|sent|transfer|slip|ဖြတ်ပိုင်း|ငွေလွှဲ|ပို့လိုက်|ပို့ထား)(?![a-zA-Z\u1000-\u109F])', 'SLIP_UPLOAD', True),
+
+    # ── CONFIRMATION in active order (looser match) ──
+    (r'(?<![a-zA-Z\u1000-\u109F])(yes|confirm|ok|okay|sure|go ahead|do it|proceed|ဟုတ်ကဲ့|အတည်ပြု|မှာ|တင်ပေး|ယူမယ်)(?![a-zA-Z\u1000-\u109F])', 'START_ORDER', False),
 ]
 
 COMPLEX_KEYWORDS = [

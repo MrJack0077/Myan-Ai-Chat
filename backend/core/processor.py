@@ -304,6 +304,21 @@ async def process_core_logic(data):
         prof["current_order"]["total_price"] = 0
         prof["dynamics"]["order_state"] = "COLLECTING"
         print(f"🧹 Cleared old order — starting fresh for {user_id}", flush=True)
+
+    # ⚡ Phone number extraction: auto-detect from user message + reply
+    import re as _phone_re
+    phone_match = _phone_re.search(r'(09\d{7,10}|\+?959\d{7,9})', user_msg)
+    if phone_match and phone_match.group(1) != prof["identification"].get("phone", ""):
+        prof["identification"]["phone"] = phone_match.group(1)
+        print(f"📱 Phone auto-extracted: {phone_match.group(1)}", flush=True)
+        await save_profile(shop_doc_id, user_id, prof)
+    # Also check reply_text for phone (AI sometimes puts it in reply)
+    if not phone_match and reply_text:
+        phone_match2 = _phone_re.search(r'(09\d{7,10}|\+?959\d{7,9})', reply_text)
+        if phone_match2 and phone_match2.group(1) != prof["identification"].get("phone", ""):
+            prof["identification"]["phone"] = phone_match2.group(1)
+            print(f"📱 Phone extracted from AI reply: {phone_match2.group(1)}", flush=True)
+            await save_profile(shop_doc_id, user_id, prof)
     
     print(f"⏱️  [5] Unified Agent done: {(time.time()-t5):.2f}s | intent={intent_type} | tokens={total_tokens}", flush=True)
     t6 = time.time()
