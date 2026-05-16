@@ -124,6 +124,8 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
     # Save extracted data to profile (using nested helper)
     update_nested_profile(prof, final_data.get("extracted", {}))
     extracted = final_data.get("extracted", {})
+    print(f"📦 DEBUG: extracted data → name={prof['identification'].get('name','?')}, phone={prof['identification'].get('phone','?')}, items={prof['current_order'].get('items',[])}", flush=True)
+    await save_profile(shop_doc_id, user_id, prof)
     
     # ── Professional Order Extraction (keyword-based, 0ms) ──
     from .order_extractor import extract_order_data

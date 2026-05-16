@@ -42,6 +42,7 @@ GREETING — hello/thanks | reply warmly 1-2 sentences
 PRODUCT_INQUIRY — items/prices/colors/sizes | reply from DB info only, never invent
 START_ORDER — want to buy/order | reply: natural transition like 'အော်ဒါတင်ဖို့ နာမည်လေးပေးပါ', extracted.items=what they want
 ORDER — in order flow collecting info | ask 1 missing piece at a time
+ORDER_CONFIRMED — customer confirms details, ready to complete | is_complex=TRUE, reply: warm thank-you + confirmation
 DELIVERY — shipping/times | reply from delivery info
 PAYMENT — methods/KPay/COD | reply from payment info
 SLIP_UPLOAD — payment screenshot | reply empty
@@ -216,6 +217,36 @@ async def run_unified_agent(
             data["reply"] = data.pop("answer")
         if "message" in data and not data.get("reply"):
             data["reply"] = data.pop("message")
+        
+        # ⚡ AI JSON format normalization: {parameters: {items: [...], customer: {...}}}
+        # AI often wraps extracted data in 'parameters' or 'customer' fields
+        params = data.get("parameters", {})
+        if isinstance(params, dict) and params:
+            if not data.get("extracted"):
+                data["extracted"] = {}
+            extr = data["extracted"]
+            # Items from parameters
+            if isinstance(params.get("items"), list):
+                item_names = [i.get("name", str(i)) if isinstance(i, dict) else str(i) for i in params["items"]]
+                if item_names and not extr.get("items"):
+                    extr["items"] = item_names
+            # Customer data from parameters
+            cust = params.get("customer", {})
+            if isinstance(cust, dict):
+                if cust.get("name") and not extr.get("name"):
+                    extr["name"] = cust["name"]
+                if cust.get("phone") and not extr.get("phone"):
+                    extr["phone"] = str(cust["phone"])
+                if cust.get("address") and not extr.get("address"):
+                    extr["address"] = cust["address"]
+            # Price/total from parameters
+            if params.get("total_price") and not extr.get("total_price"):
+                extr["total_price"] = params["total_price"]
+            if params.get("payment_method") and not extr.get("payment_method"):
+                extr["payment_method"] = params["payment_method"]
+            # Buttons/images from parameters
+            if isinstance(params.get("buttons"), list) and not extr.get("buttons"):
+                extr["buttons"] = params["buttons"]
         
         um = res.usage_metadata
         tokens = {
