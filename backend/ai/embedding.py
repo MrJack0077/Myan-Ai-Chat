@@ -33,7 +33,7 @@ async def generate_embedding(text: str) -> list[float]:
     if studio_client:
         try:
             result = studio_client.models.embed_content(
-                model="gemini-embedding-2",
+                model=EMBEDDING_MODEL_NAME,
                 contents=[text],
             )
             if result and result.embeddings:

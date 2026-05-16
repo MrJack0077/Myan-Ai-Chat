@@ -44,7 +44,7 @@ except Exception as e:
 # ── Model Names ──
 BASE_MODEL_NAME = os.getenv("BASE_MODEL_NAME", "gemini-3.1-flash-lite").strip()
 FAST_MODEL_NAME = os.getenv("FAST_MODEL_NAME", "gemini-3.1-flash-lite").strip()
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "text-embedding-004").strip()
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "gemini-embedding-2").strip()
 
 # ── Firestore ──
 db = None
