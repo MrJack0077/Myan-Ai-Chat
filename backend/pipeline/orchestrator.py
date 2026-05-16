@@ -40,9 +40,10 @@ async def process_core_logic(data: dict) -> None:
     print(f"\n📩 Pipeline START for {user_id} | msg: '{user_msg[:60]}...'", flush=True)
 
     # ── Stage 2: Validate (rate limit, plan, lock) ──
-    shop, shop_doc_id, token, prof = await validate_request(acc_id, user_id, data)
-    if not all([shop, token, prof]):
+    result = await validate_request(acc_id, user_id, data)
+    if not result:
         return
+    shop, shop_doc_id, token, prof = result
 
     # ── Stage 3: Load profile + update state ──
     prof, order_state = await load_and_update_profile(prof, shop_doc_id, user_id, user_msg)
