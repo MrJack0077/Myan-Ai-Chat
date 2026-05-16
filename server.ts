@@ -86,6 +86,11 @@ async function startServer() {
   });
   } // end of PM2_MANAGED else block
 
+  // ── PM2 managed: backend runs separately ──
+  if (process.env.PM2_MANAGED === "true") {
+    console.log("✅ PM2 managed: Python spawn skipped (backend-ai runs separately)");
+  }
+
   const io = new Server(httpServer, {
     cors: {
       origin: "*",

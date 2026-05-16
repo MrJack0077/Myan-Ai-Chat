@@ -100,10 +100,9 @@ export const clearShopCache = async (shopId: string, specificKeyword?: string) =
   }
 
   try {
-    const apiUrl = import.meta.env.VITE_API_URL || 'https://admin.myansocial.shop';
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
     await fetch(`${apiUrl}/api/clear-cache/${shopId}?t=${Date.now()}`, {
       method: 'GET',
-      mode: 'no-cors'
     });
   } catch (error) {
     console.error(`[clearShopCache] Error triggering external API cache clear for ${shopId}:`, error);

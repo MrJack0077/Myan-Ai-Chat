@@ -27,7 +27,7 @@ module.exports = {
     {
       name: 'frontend',
       script: 'server.ts',
-      interpreter: 'node_modules/.bin/tsx',
+      interpreter: '/home/tirus/Work/Real Myan Social/node_modules/.bin/tsx',
       cwd: '..',
       
       autorestart: true,
@@ -45,6 +45,7 @@ module.exports = {
       env: {
         NODE_ENV: 'development',
         PM2_MANAGED: 'true',
+        SKIP_PYTHON_SPAWN: 'true',
       },
       
       max_memory_restart: '500M',
