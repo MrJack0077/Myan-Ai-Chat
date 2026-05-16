@@ -102,6 +102,16 @@ async def process_core_logic(data: dict) -> None:
 
     # ── Stage 7: Send reply + handle order ──
     try:
+        # Detect channel from shop's sendpulseBots
+        detected_channel = ""
+        bots = shop.get("sendpulseBots", [])
+        for bot in bots:
+            if isinstance(bot, dict) and bot.get("id") == acc_id:
+                detected_channel = bot.get("channel", "")
+                break
+        if detected_channel:
+            print(f"📡 Channel detected: {detected_channel}", flush=True)
+        
         await send_reply(
             unified_result=unified_result,
             acc_id=acc_id,
@@ -111,7 +121,7 @@ async def process_core_logic(data: dict) -> None:
             token=token,
             prof=prof,
             currency=shop_info.get("currency", "MMK"),
-            channel=shop.get("channel", ""),
+            channel=detected_channel,
             agent_id=shop.get("agentId"),
             lang=ai_config.get("responseLanguage", "Myanmar"),
         )

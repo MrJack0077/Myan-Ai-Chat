@@ -45,10 +45,23 @@ async def send_reply(
     # ── Save to history ──
     await add_to_history(shop_doc_id, conv_id, "AI", reply_text, max_len=10)
 
-    # ── Stop typing + send ──
+    # ── Stop typing + send (with channel detection from shop data) ──
     await send_stop_typing(acc_id, user_id, token)
     await asyncio.sleep(_typing_delay(reply_text))
-    await send_message(acc_id, user_id, reply_text, extracted, token, channel)
+    
+    # Detect channel from shop's sendpulseBots array
+    detected_channel = channel  # Use passed channel if available
+    if not detected_channel:
+        from shops.service import get_shop_data
+        shop = await get_shop_data(acc_id)
+        if shop:
+            bots = shop.get("sendpulseBots", [])
+            for bot in bots:
+                if isinstance(bot, dict) and bot.get("id") == acc_id:
+                    detected_channel = bot.get("channel", "")
+                    break
+    
+    await send_message(acc_id, user_id, reply_text, extracted, token, detected_channel)
 
     # ── Order confirmation ──
     if intent_type == "ORDER_CONFIRMED":
