@@ -22,9 +22,15 @@ async def worker_process(worker_id: int) -> None:
                 await _print_idle(worker_id)
                 continue
 
+            print(f"⚡ Worker {worker_id}: got task, processing...", flush=True)
+
             # Process the message
             from pipeline.orchestrator import process_core_logic
-            await process_core_logic(data)
+            try:
+                await process_core_logic(data)
+            except Exception as inner_e:
+                print(f"🔥 Worker {worker_id}: process_core_logic CRASH: {inner_e}", flush=True)
+                traceback.print_exc()
 
         except asyncio.CancelledError:
             print(f"🛑 Worker {worker_id} cancelled.", flush=True)

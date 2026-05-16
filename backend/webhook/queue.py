@@ -6,14 +6,18 @@ import asyncio
 from config import r
 
 QUEUE_KEY = "sendpulse_task_queue"
-# In-memory fallback (asyncio.Queue) for when Redis is unavailable
+# In-memory fallback — created lazily in the first worker's event loop
 _memory_queue: asyncio.Queue | None = None
+_queue_lock = asyncio.Lock()
 
 
-def _get_memory_queue() -> asyncio.Queue:
+async def _get_memory_queue() -> asyncio.Queue:
+    """Get or create the in-memory queue in the current event loop."""
     global _memory_queue
     if _memory_queue is None:
-        _memory_queue = asyncio.Queue(maxsize=500)
+        async with _queue_lock:
+            if _memory_queue is None:
+                _memory_queue = asyncio.Queue(maxsize=500)
     return _memory_queue
 
 
@@ -29,7 +33,7 @@ async def push_to_queue(payload: dict) -> bool:
 
     # Fallback to in-memory queue
     try:
-        queue = _get_memory_queue()
+        queue = await _get_memory_queue()
         queue.put_nowait(data_str)
         return True
     except asyncio.QueueFull:
@@ -52,7 +56,8 @@ async def pop_from_queue(timeout: float = 5.0) -> dict | None:
 
     # Fallback to memory queue
     try:
-        raw = await asyncio.wait_for(_get_memory_queue().get(), timeout=timeout)
+        queue = await _get_memory_queue()
+        raw = await asyncio.wait_for(queue.get(), timeout=timeout)
         return json.loads(raw)
     except asyncio.TimeoutError:
         return None
