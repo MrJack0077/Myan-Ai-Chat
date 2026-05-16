@@ -93,10 +93,17 @@ async def run_unified_agent(
     
     # ⚡ ORDER STATE AWARENESS — critical for keeping context
     if order_state == "COLLECTING":
-        extra_ctx.append(f"⚡ You are COLLECTING order. Ask ONE missing field at a time (name/phone/address/payment).")
-        extra_ctx.append(f"⚡ DO NOT greet again. Stay in order flow. If customer changes topic → keep order context.")
+        extra_ctx.append(f"⚡ ORDER STATE: You are COLLECTING order info.")
+        extra_ctx.append(f"   IMPORTANT: Extract name, phone, address, items from EVERY message.")
+        extra_ctx.append(f"   If customer gives info → update extracted fields, thank them, ask NEXT missing field.")
+        extra_ctx.append(f"   If customer says 'yes/ok/confirm/ဟုတ်ကဲ့/မှန်ပါတယ်/အိုကေ' → intent=ORDER_CONFIRMED, is_complex=TRUE.")
+        extra_ctx.append(f"   DO NOT greet again. Stay in order flow!")
+        extra_ctx.append(f"   DO NOT set intent=GREETING when customer confirms — use ORDER_CONFIRMED.")
     elif order_state == "CONFIRMING":
-        extra_ctx.append(f"⚡ Customer CONFIRMING order. Show summary, ask for final OK.")
+        extra_ctx.append(f"⚡ ORDER STATE: Customer CONFIRMING. Show full order summary + payment method.")
+        extra_ctx.append(f"   Ask: 'မှန်ကန်ပါသလားရှင့်' — if yes → intent=ORDER_CONFIRMED.")
+    elif order_state == "COMPLETED":
+        extra_ctx.append(f"⚡ ORDER STATE: Order completed. Thank customer and suggest related products.")
     
     extra_ctx += [
         f"[PAYMENT METHODS] {pmt_str}, COD",

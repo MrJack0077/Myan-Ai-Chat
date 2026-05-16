@@ -28,6 +28,8 @@ async def handle_order_confirmation(
     phone = ident.get("phone", "")
     name = ident.get("name", "")
     address = ident.get("address", "")
+    
+    print(f"📋 Order validation: name='{name}' phone='{phone}' address='{address[:30]}...' items={order_items} total={total_price}", flush=True)
 
     valid, error_msg = validate_order(name, phone, address, order_items, total_price)
     if not valid:
@@ -55,11 +57,12 @@ async def handle_order_confirmation(
     }
 
     try:
-        await asyncio.to_thread(
+        order_ref = await asyncio.to_thread(
             db.collection("shops").document(shop_doc_id)
             .collection("orders").add, document_data=order_data,
         )
-        print(f"✅ Order saved: {name} | {order_items} | {total_price} {currency}", flush=True)
+        order_id = order_ref[1].id if isinstance(order_ref, tuple) else getattr(order_ref, 'id', 'unknown')
+        print(f"✅ Order SAVED: {order_id} | {name} | {order_items} | {total_price} {currency}", flush=True)
 
         # Reduce stock
         await _reduce_stock(shop_doc_id, order_items)

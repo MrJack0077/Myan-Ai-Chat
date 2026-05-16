@@ -45,6 +45,33 @@ async def send_reply(
     # ── Save to history ──
     await add_to_history(shop_doc_id, conv_id, "AI", reply_text, max_len=10)
 
+    # ⚡ CRITICAL: Save profile with AI-extracted data immediately
+    if extracted:
+        ident = prof.setdefault("identification", {})
+        curr = prof.setdefault("current_order", {})
+        dyn = prof.setdefault("dynamics", {})
+        
+        if extracted.get("name"):
+            ident["name"] = str(extracted["name"])
+        if extracted.get("phone"):
+            ident["phone"] = str(extracted["phone"])
+        if extracted.get("address"):
+            ident["address"] = str(extracted["address"])
+        if extracted.get("items"):
+            curr["items"] = list(extracted["items"])
+        if extracted.get("total_price"):
+            try:
+                curr["total_price"] = int(extracted["total_price"])
+            except (ValueError, TypeError):
+                curr["total_price"] = 0
+        if extracted.get("payment_method"):
+            curr["payment_method"] = str(extracted["payment_method"])
+        
+        # Save profile to Redis + Firestore (background-safe)
+        if any(extracted.get(k) for k in ["name", "phone", "items", "payment_method"]):
+            asyncio.create_task(save_profile(shop_doc_id, conv_id, prof))
+            print(f"📝 Profile auto-saved with: name={ident.get('name','')}, phone={ident.get('phone','')}, items={curr.get('items',[])}", flush=True)
+
     # ── Stop typing + send (with channel detection from shop data) ──
     await send_stop_typing(acc_id, user_id, token)
     await asyncio.sleep(_typing_delay(reply_text))
@@ -64,12 +91,40 @@ async def send_reply(
     await send_message(acc_id, user_id, reply_text, extracted, token, detected_channel)
 
     # ── Order confirmation ──
-    if intent_type == "ORDER_CONFIRMED":
+    should_confirm = (intent_type == "ORDER_CONFIRMED" or 
+                      (order_state == "COLLECTING" and _is_confirmation(reply_text, user_msg)))
+    
+    if should_confirm:
+        # Force intent to ORDER_CONFIRMED if keyword detected
+        if intent_type != "ORDER_CONFIRMED":
+            print(f"🔔 Keyword override: COLLECTING + confirm → ORDER_CONFIRMED", flush=True)
+            unified_result["intent"] = "ORDER_CONFIRMED"
+        
         print(f"🔔 Order confirmed! Saving...", flush=True)
+        print(f"🔔 DEBUG: ident={prof.get('identification',{})} order={prof.get('current_order',{})}", flush=True)
+        print(f"🔔 DEBUG: extracted={extracted}", flush=True)
+        
         await handle_order_confirmation(
             shop_doc_id, acc_id, conv_id, user_id, token, agent_id,
             prof, currency, unified_result,
         )
+
+
+def _is_confirmation(ai_reply: str, user_msg: str) -> bool:
+    """Check if message indicates order confirmation (keyword + context)."""
+    msg = (user_msg or "").lower().strip()
+    confirm_words = [
+        "yes", "ok", "okay", "confirm", "correct", "right", "confirmed",
+        "ဟုတ်", "ဟုတ်ကဲ့", "မှန်", "အိုကေ", "yes ပါ",
+        "အားလုံးမှန်ပါတယ်", "တင်လိုက်ပါ", "အော်ဒါတင်လိုက်",
+        "အတည်ပြုပါတယ်", "ဟုတ်ပါတယ်", "မှန်ပါတယ်",
+    ]
+    if any(w in msg for w in confirm_words):
+        return True
+    # Also check if AI reply contains order summary (indicates AI already confirmed)
+    if ai_reply and any(w in (ai_reply or "").lower() for w in ["order confirmed", "အော်ဒါအတည်ပြု", "အတည်ပြုပြီး"]):
+        return True
+    return False
 
 
 def _fallback_reply(intent: str, lang: str) -> str:
