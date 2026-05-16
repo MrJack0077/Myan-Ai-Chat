@@ -29,7 +29,7 @@ async def get_shop_data(acc_id: str) -> dict | None:
         import asyncio
         shops_ref = db.collection("shops")
         query = shops_ref.where("acc_id", "==", acc_id).limit(1)
-        docs = await asyncio.to_thread(query.stream, transaction_timeout=10)
+        docs = await asyncio.to_thread(query.stream)
 
         for doc in docs:
             data = doc.to_dict() if callable(doc.to_dict) else {}
