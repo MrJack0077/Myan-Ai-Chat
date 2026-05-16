@@ -57,34 +57,6 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
         final_data = await run_order_agent(user_msg, prof, ai_config, BASE_MODEL_NAME, chat_history, delivery_info, payment_info, tool_info, currency, policies, media_parts=media_parts, shop_doc_id=shop_doc_id)
         if final_data.get("intent") in ["SUMMARY_SENT", "WAITING_FOR_SLIP", "COLLECTING"]:
             prof["dynamics"]["order_state"] = final_data["intent"]
-        
-        # ── Auto-detect confirmation keywords ──
-        msg_lower = user_msg.lower()
-        confirm_keywords = ['yes', 'ဟုတ်', 'confirm', 'ok', 'okay', 'အင်း', 'မှန်တယ်', 'ဟုတ်ကဲ့', 'မှာ', 'တင်ပေး', 'ယူမယ်', 'do it', 'go ahead', 'proceed']
-        if any(kw in msg_lower for kw in confirm_keywords):
-            has_data = (prof["identification"].get("name") and 
-                       prof["current_order"].get("items"))
-            if has_data:
-                print(f"🔔 Auto-detected confirmation keyword → forcing ORDER_CONFIRMED", flush=True)
-                final_data["intent"] = "ORDER_CONFIRMED"
-                final_data["is_complex"] = True
-    elif order_state in ["COLLECTING", "WAITING_FOR_SLIP", "SUMMARY_SENT"] and is_inquiry:
-        # Customer is in order flow but message looks like product inquiry
-        # → treat as order continuation, not new product inquiry
-        print(f"   - Selected: ORDER_AGENT (state={order_state}, inquiry override)", flush=True)
-        final_data = await run_order_agent(user_msg, prof, ai_config, BASE_MODEL_NAME, chat_history, delivery_info, payment_info, tool_info, currency, policies, media_parts=media_parts, shop_doc_id=shop_doc_id)
-        if final_data.get("intent") in ["SUMMARY_SENT", "WAITING_FOR_SLIP", "COLLECTING"]:
-            prof["dynamics"]["order_state"] = final_data["intent"]
-        
-        msg_lower = user_msg.lower()
-        confirm_keywords = ['yes', 'ဟုတ်', 'confirm', 'ok', 'okay', 'အင်း', 'မှန်တယ်', 'ဟုတ်ကဲ့', 'မှာ', 'တင်ပေး', 'do it', 'go ahead', 'proceed']
-        if any(kw in msg_lower for kw in confirm_keywords):
-            has_data = (prof["identification"].get("name") and 
-                       prof["current_order"].get("items"))
-            if has_data:
-                print(f"🔔 Auto-detected confirmation keyword → forcing ORDER_CONFIRMED", flush=True)
-                final_data["intent"] = "ORDER_CONFIRMED"
-                final_data["is_complex"] = True
     elif media_parts and intent_type not in ["ORDER", "START_ORDER"]:
         print("   - Selected: MEDIA_AGENT (photo/voice analysis)")
         final_data = await run_media_agent(user_msg, tool_info, ai_config, policies, prof, BASE_MODEL_NAME, chat_history, media_parts, delivery_info, payment_info, shop_doc_id=shop_doc_id, photo_context=photo_context)
@@ -133,33 +105,17 @@ async def route_to_agent(order_state, prof, user_msg, ai_config, chat_history, m
     print(f"📦 DEBUG: extracted data → name={prof['identification'].get('name','?')}, phone={prof['identification'].get('phone','?')}, items={prof['current_order'].get('items',[])}", flush=True)
     await save_profile(shop_doc_id, user_id, prof)
     
-    # ── Professional Order Data Extraction (keyword-based, 0ms) ──
-    try:
-        from .order_extractor import extract_order_data
-        kw_data = extract_order_data(user_msg, tool_info)
-        if kw_data:
-            if kw_data.get("name") and len(kw_data["name"]) >= 2:
-                old_name = prof["identification"].get("name", "")
-                # Overwrite if old name is corrupted (short/truncated) or new is better
-                if not old_name or len(old_name) < 3 or len(kw_data["name"]) > len(old_name):
-                    prof["identification"]["name"] = kw_data["name"]
-            if kw_data.get("phone"):
-                prof["identification"]["phone"] = kw_data["phone"]
-            if kw_data.get("address"):
-                old_addr = prof["current_order"].get("address", "")
-                ai_junk = ['ပို့ဆောင်', 'မှာယူ', 'ငွေပေး', 'ကျေးဇူး', 'အော်ဒါ']
-                # Overwrite if old address has AI junk or empty
-                if not old_addr or any(w in old_addr for w in ai_junk) or len(kw_data["address"]) < len(old_addr):
-                    prof["current_order"]["address"] = kw_data["address"]
-            if kw_data.get("payment_method"):
-                prof["current_order"]["payment_method"] = kw_data["payment_method"]
-            if kw_data.get("items"):
-                prof["current_order"]["items"] = kw_data["items"]
-            if kw_data.get("total_price"):
-                prof["current_order"]["total_price"] = kw_data["total_price"]
-            print(f"📦 Extracted: {json.dumps(kw_data, ensure_ascii=False)[:200]}", flush=True)
-    except Exception as e:
-        print(f"⚠️ Order extraction error: {e}", flush=True)
+    # ── Phone number extraction (data helper, not intent filter) ──
+    import re
+    msg_lower = user_msg.lower()
+    
+    # Phone (Myanmar format) — simple regex for data extraction only
+    if not prof["identification"].get("phone"):
+        pm = re.search(r'(09\d{7,9}|\+?959\d{7,9})', user_msg)
+        if pm:
+            prof["identification"]["phone"] = pm.group(1)
+            print(f"📱 Extracted phone: {prof['identification']['phone']}", flush=True)
+            await save_profile(shop_doc_id, user_id, prof)
     
     # ── Legacy keyword extraction (backup) ──
     import re
