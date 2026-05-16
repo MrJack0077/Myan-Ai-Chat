@@ -36,6 +36,11 @@ async def generate_ai_reply(
         currency=currency,
     )
 
+    # ── Guard: handle None result ──
+    if result is None:
+        print(f"⚠️ AI returned None — using fallback", flush=True)
+        result = {"intent": "PRODUCT_INQUIRY", "reply": "ခဏစောင့်ပေးပါရှင့်။", "is_complex": False, "extracted": {}, "prompt_tokens": 0, "candidate_tokens": 0}
+
     # ── Post-AI processing ──
     reply_text = result.get("reply", "")
     if isinstance(reply_text, dict):
