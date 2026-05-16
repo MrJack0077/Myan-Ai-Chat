@@ -42,9 +42,9 @@ async def clear_cache_endpoint(target_id: str):
     if not r:
         return {"ok": False, "reason": "Redis unavailable"}
     try:
-        # Invalidate shop caches via central manager
-        from core.cache_manager import invalidate_shop_caches
-        await invalidate_shop_caches(target_id, acc_id=None)
+        # Invalidate shop caches via shops automation module
+        from shops.automation import _invalidate_shop_keys
+        await _invalidate_shop_keys(target_id)
         return {"ok": True, "message": f"Cache cleared for {target_id}"}
     except Exception as e:
         return {"ok": False, "error": str(e)}

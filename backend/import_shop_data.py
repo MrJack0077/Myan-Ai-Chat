@@ -9,10 +9,10 @@ import os
 # Add backend to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from utils import db
+from config import db
 from google.cloud.firestore_v1.vector import Vector
 import google.generativeai as genai
-from utils.config import EMBEDDING_MODEL_NAME
+from config import EMBEDDING_MODEL_NAME
 
 # ══════════════════════════════════════════════════════════════
 # CONFIG — Change this to your shop ID

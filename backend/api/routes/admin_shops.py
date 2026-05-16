@@ -65,12 +65,12 @@ async def update_automation_settings(shop_id: str, settings: AutomationSettings)
             db.collection("shops").document(shop_id).update, update_data
         )
 
-        # Invalidate caches
+        # Invalidate caches via shop automation + prompt cache modules
         if r:
-            from core.cache_manager import invalidate_shop_caches
-            from core.prompt_cache import invalidate_system_prompt_cache
-            await invalidate_shop_caches(shop_id)
-            await invalidate_system_prompt_cache(shop_id)
+            from shops.automation import _invalidate_shop_keys
+            from ai.prompts.cache import invalidate_prompt_cache
+            await _invalidate_shop_keys(shop_id)
+            await invalidate_prompt_cache(shop_id)
 
         return {"ok": True, "shop_id": shop_id}
     except Exception as e:
