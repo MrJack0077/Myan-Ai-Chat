@@ -195,13 +195,32 @@ async def run_unified_agent(
         
         # ⚡ Normalize: AI sometimes returns nested structures or wrong field names
         if isinstance(data.get("response"), dict):
-            # AI returned {response: {text: "...", ...}} → extract text
             inner = data["response"]
             data["reply"] = inner.get("text") or inner.get("reply") or inner.get("response_text") or inner.get("message") or ""
             if "intent" in inner and not data.get("intent"):
                 data["intent"] = inner["intent"]
         elif isinstance(data.get("response"), str):
             data["reply"] = data.pop("response")
+
+        # ⚡ dialog.message normalization (AI sometimes wraps reply in dialog)
+        if isinstance(data.get("dialog"), dict):
+            dial = data["dialog"]
+            if dial.get("message") and not data.get("reply"):
+                data["reply"] = dial["message"]
+            if dial.get("intent") and not data.get("intent"):
+                data["intent"] = dial["intent"]
+            # Extract extra_info into extracted
+            extra = dial.get("extra_info", {})
+            if isinstance(extra, dict):
+                if not data.get("extracted"):
+                    data["extracted"] = {}
+                extr = data["extracted"]
+                if extra.get("name") and not extr.get("name"):
+                    extr["name"] = extra["name"]
+                if extra.get("phone") and not extr.get("phone"):
+                    extr["phone"] = str(extra["phone"])
+                if isinstance(extra.get("items"), list) and not extr.get("items"):
+                    extr["items"] = extra["items"]
 
         # ⚡ Plural→Singular normalization: AI sometimes returns arrays
         if not data.get("reply") and isinstance(data.get("replies"), list) and data["replies"]:
