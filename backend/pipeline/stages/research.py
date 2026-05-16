@@ -10,20 +10,27 @@ async def run_research(user_msg: str, shop_doc_id: str,
     """
     Run embedding-based semantic research for the user query.
     1. Generate embedding for the user message
-    2. Search Firestore for similar products (hybrid search)
-    3. Check semantic cache for similar Q&A pairs
-    Returns (tool_info, msg_emb).
+    2. Search Firestore for similar products (keyword + vector)
+    3. Returns (tool_info, msg_emb). Falls back to keyword-only if embedding fails.
     """
     t_start = time.time()
     msg_emb = await generate_embedding(user_msg)
 
-    # Semantic search for products
+    # Semantic search for products (keyword always works, embedding optional)
     tool_info = ""
-    if msg_emb:
+    try:
+        tool_info = await _hybrid_search(user_msg, shop_doc_id, msg_emb)
+    except Exception as e:
+        print(f"⚠️ Semantic search error: {e}", flush=True)
+
+    # If still empty, try keyword-only search
+    if not tool_info or tool_info == "No products in database.":
         try:
-            tool_info = await _hybrid_search(user_msg, shop_doc_id, msg_emb)
-        except Exception as e:
-            print(f"⚠️ Semantic search error: {e}", flush=True)
+            tool_info = await _keyword_only_search(user_msg, shop_doc_id)
+            if tool_info:
+                print(f"✅ Keyword search found products (embedding unavailable)", flush=True)
+        except Exception:
+            pass
 
     # Inject last discussed product for vague messages
     tool_info = _inject_last_product(tool_info, user_msg, chat_history)
@@ -103,6 +110,53 @@ def _cosine_sim(a: list[float], b: list[float]) -> float:
     if mag_a == 0 or mag_b == 0:
         return 0.0
     return dot / (mag_a * mag_b)
+
+
+async def _keyword_only_search(query: str, shop_doc_id: str) -> str:
+    """
+    Pure keyword-based product search (no embedding needed).
+    Used as fallback when embedding providers are down.
+    """
+    from config import db
+    if not db:
+        return ""
+
+    import asyncio
+    products_ref = db.collection("shops").document(shop_doc_id).collection("products")
+    docs = await asyncio.to_thread(products_ref.stream)
+    products = []
+    for d in docs:
+        data = d.to_dict() if callable(d.to_dict) else {}
+        data["id"] = d.id
+        products.append(data)
+
+    if not products:
+        return ""
+
+    query_lower = query.lower()
+    scored = []
+    for prod in products:
+        name = prod.get("name", "")
+        score = 0
+        if name.lower() in query_lower or query_lower in name.lower():
+            score += 5
+        for word in query_lower.split():
+            if word in name.lower():
+                score += 1
+        if score > 0:
+            scored.append((score, prod))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    # Build results string (top 10 keyword matches)
+    lines = []
+    for _, prod in scored[:10]:
+        name = prod.get("name", "Unknown")
+        price = prod.get("price", "N/A")
+        stock = prod.get("stock", 0)
+        lines.append(f"- {name} | {price} MMK | Stock: {stock}")
+
+    return "\n".join(lines) if lines else ""
 
 
 def _inject_last_product(tool_info: str, user_msg: str, chat_history: str) -> str:
