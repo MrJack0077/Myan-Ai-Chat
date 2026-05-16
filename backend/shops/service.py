@@ -24,17 +24,34 @@ async def get_shop_data(acc_id: str) -> dict | None:
         except Exception:
             pass
 
-    # Query Firestore
+    # Query Firestore — try by bot_id (sendpulseBotIds array) or acc_id field
     try:
         import asyncio
         shops_ref = db.collection("shops")
-        query = shops_ref.where("acc_id", "==", acc_id).limit(1)
-        docs = await asyncio.to_thread(query.stream)
 
-        for doc in docs:
+        # Try query by sendpulseBotIds array (contains the bot_id)
+        query = shops_ref.where("sendpulseBotIds", "array_contains", acc_id).limit(1)
+        docs = await asyncio.to_thread(query.stream)
+        docs_list = list(docs)
+
+        # Fallback: try acc_id field
+        if not docs_list:
+            query2 = shops_ref.where("acc_id", "==", acc_id).limit(1)
+            docs_list = list(await asyncio.to_thread(query2.stream))
+
+        # Fallback: iterate all shops and check acc_id
+        if not docs_list:
+            all_docs = list(await asyncio.to_thread(shops_ref.stream))
+            for d in all_docs:
+                data = d.to_dict() if callable(d.to_dict) else {}
+                if data.get("acc_id") == acc_id:
+                    docs_list = [d]
+                    break
+
+        if docs_list:
+            doc = docs_list[0]
             data = doc.to_dict() if callable(doc.to_dict) else {}
             data["shop_doc_id"] = doc.id
-            # Cache in Redis (TTL: 5 min)
             if r:
                 try:
                     import json
