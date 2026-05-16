@@ -22,20 +22,36 @@ async def handle_order_confirmation(
     ident = prof.get("identification", {})
     order_items = prof.get("current_order", {}).get("items", [])
     total_price = prof.get("current_order", {}).get("total_price", 0)
+    payment_method = final_data.get("extracted", {}).get("payment_method", "")
 
+    # ── Validation ──
+    phone = ident.get("phone", "")
+    name = ident.get("name", "")
+    address = ident.get("address", "")
+
+    valid, error_msg = validate_order(name, phone, address, order_items, total_price)
+    if not valid:
+        print(f"❌ Order validation failed: {error_msg}", flush=True)
+        # Reset order state so customer can retry
+        prof.setdefault("dynamics", {})["order_state"] = "COLLECTING"
+        from customers.profile import save_profile
+        await save_profile(shop_doc_id, user_id, prof)
+        return  # Don't save invalid order
+
+    # ── Save order ──
     order_data = {
         "shop_doc_id": shop_doc_id,
         "acc_id": acc_id,
         "user_id": user_id,
-        "customer_name": ident.get("name", "Unknown"),
-        "phone": ident.get("phone", ""),
-        "address": ident.get("address", ""),
+        "customer_name": name,
+        "phone": phone,
+        "address": address,
         "items": order_items,
         "total_price": total_price,
         "currency": currency,
         "status": "confirmed",
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "payment_method": final_data.get("extracted", {}).get("payment_method", ""),
+        "payment_method": payment_method,
     }
 
     try:
@@ -43,13 +59,39 @@ async def handle_order_confirmation(
             db.collection("shops").document(shop_doc_id)
             .collection("orders").add, document_data=order_data,
         )
-        print(f"✅ Order saved: {ident.get('name')} | {order_items} | {total_price} {currency}", flush=True)
+        print(f"✅ Order saved: {name} | {order_items} | {total_price} {currency}", flush=True)
 
         # Reduce stock
         await _reduce_stock(shop_doc_id, order_items)
 
+        # Update profile
+        prof.setdefault("dynamics", {})["order_state"] = "COMPLETED"
+        sales = prof.setdefault("sales_data", {})
+        sales.setdefault("past_purchases", []).append({
+            "items": order_items,
+            "total_price": total_price,
+            "date": datetime.now(timezone.utc).isoformat(),
+        })
+        sales["total_spent"] = sales.get("total_spent", 0) + total_price
+        from customers.profile import save_profile
+        await save_profile(shop_doc_id, user_id, prof)
+
     except Exception as e:
         print(f"🔥 Order save failed: {e}", flush=True)
+
+
+def validate_order(name: str, phone: str, address: str,
+                   items: list, total: int) -> tuple[bool, str]:
+    """Validate order data before saving. Returns (is_valid, error_message)."""
+    if not phone or len(phone) < 6:
+        return False, "Phone number required (min 6 digits)"
+    if not name or len(name) < 2:
+        return False, "Customer name required"
+    if not items or len(items) == 0:
+        return False, "No items in order"
+    if not total or total <= 0:
+        return False, "Total price must be > 0"
+    return True, ""
 
 
 async def _reduce_stock(shop_doc_id: str, items: list[str]) -> None:
